@@ -21,8 +21,20 @@ export interface Config {
   headless?: boolean
   /** Per-operation timeout in milliseconds. */
   operationTimeoutMs?: number
-  /** Optional absolute path to a custom Chromium/Chrome executable. */
+  /** Optional absolute path to a custom Chrome / Chromium binary. */
   executablePath?: string
+  /** Session persistence options. When enabled, navigate/click/type/eval calls
+   *  share the same browser context, preserving cookies and localStorage. */
+  session?: {
+    /** Enable persistent sessions (default: false) */
+    enabled?: boolean
+    /** Session timeout in ms (default: 120000) */
+    timeoutMs?: number
+    /** Max concurrent pages (default: 5) */
+    maxPages?: number
+    /** Directory for session files (default: ~/.cache/browser-anti-cloudflare/sessions) */
+    sessionDir?: string
+  }
 }
 
 /** Default config values resolved at apply()-time. */

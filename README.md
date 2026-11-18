@@ -101,6 +101,36 @@ dsh plugin --profile <name> reload
 | `headless` | boolean | `true` | Run Chromium without a visible window. Set to `false` to see the browser during development. |
 | `operationTimeoutMs` | number | `45000` | Per-operation timeout (navigate, click, type, eval). |
 | `executablePath` | string | — | Absolute path to a custom Chrome / Chromium binary. Useful when the system Chromium is too old. |
+| `session.enabled` | boolean | `false` | Enable persistent browser sessions across tool calls. Preserves cookies and localStorage. |
+| `session.timeoutMs` | number | `120000` | Session idle timeout before cleanup. |
+| `session.maxPages` | number | `5` | Max concurrent pages per session. |
+| `session.sessionDir` | string | `~/.cache/browser-anti-cloudflare/sessions` | Directory for saved session JSON files. |
+
+### Session Persistence
+
+When `session.enabled: true`, the plugin maintains a single Chromium instance across
+`ac_browser_navigate` calls. Cookies, localStorage, and login state persist between
+calls, enabling multi-step workflows:
+
+```yaml
+# In your profile's cordis.patch.yml
+- insert:
+    - id: browser-anti-cloudflare
+      name: '@mulqi/dsh-browser-anti-cloudflare'
+      config:
+        headless: true
+        session:
+          enabled: true
+          timeoutMs: 120000
+```
+
+New tools available when sessions are enabled:
+- `ac_browser_session_save` — persist current state to disk
+- `ac_browser_session_load` — restore from a saved session file
+- `ac_browser_session_status` — check active session info
+
+**Note:** Session persistence shares one Chromium process. Different URLs in the same
+session share the same cookie jar. For domain isolation, use separate profiles.
 
 ## Compatibility
 
