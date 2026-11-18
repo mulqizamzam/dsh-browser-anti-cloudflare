@@ -16,6 +16,8 @@ import { writeFileSync, readFileSync, existsSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import type { Config } from './index.js'
 import { navigateWithStealth } from './stealth.js'
+import { createProxyManager } from './proxy.js'
+import type { ProxyManager } from './proxy.js'
 
 /** Serialized session data saved to disk. */
 interface SerializedSession {
@@ -48,6 +50,7 @@ export class SessionManager {
   private pages: Map<string, PageEntry> = new Map()
   private config: Required<SessionConfig>
   private sessionId: string
+  private proxyMgr: ProxyManager | undefined
 
   constructor(config: Config) {
     this.config = {
@@ -57,6 +60,7 @@ export class SessionManager {
       sessionDir: config.session?.sessionDir ?? join(process.env.HOME || '/tmp', '.cache', 'browser-anti-cloudflare', 'sessions'),
     }
     this.sessionId = Date.now().toString(36) + Math.random().toString(36).substring(2)
+    this.proxyMgr = createProxyManager(config.proxy)
   }
 
   /** Get the active page for a URL, or create one if needed. */
@@ -246,12 +250,14 @@ export class SessionManager {
   private async ensureContext(): Promise<BrowserContext> {
     if (!this.context) {
       const browser = await this.ensureBrowser()
+      const proxyOpts = this.proxyMgr?.getPlaywrightProxy()
       this.context = await browser.newContext({
         viewport: { width: 1920, height: 1080 },
         userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
         deviceScaleFactor: 1,
         hasTouch: false,
         isMobile: false,
+        ...(proxyOpts ? { proxy: proxyOpts } : {}),
       })
     }
     return this.context
