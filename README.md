@@ -132,6 +132,25 @@ New tools available when sessions are enabled:
 **Note:** Session persistence shares one Chromium process. Different URLs in the same
 session share the same cookie jar. For domain isolation, use separate profiles.
 
+### Headed Mode (Development Debugging)
+
+Set `headless: false` to run Chromium with a visible window — useful for debugging
+anti-detect scripts and WAF bypass behavior in real-time. A floating debug panel
+appears showing live fingerprint metrics:
+
+```yaml
+# In your profile's cordis.patch.yml
+- insert:
+    - id: browser-anti-cloudflare
+      name: '@mulqi/dsh-browser-anti-cloudflare'
+      config:
+        headless: false   # ← visible window for debugging
+```
+
+The overlay displays: `webdriver`, `plugins`, `chrome.runtime`, `SharedArrayBuffer`,
+`languages`, and `platform` — each with a ✓/✗ indicator. Zero overhead when
+`headless: true` (the overlay script is never loaded).
+
 ## Compatibility
 
 - **DSH:** `0.2.1-rc.2` (exact pin via `engines.dsh`)

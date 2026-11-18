@@ -12,6 +12,7 @@ import type { Browser, Response } from 'playwright'
 import type { Config } from './index.js'
 import { detectWAF, buildCombinedScript } from './waf/detector.js'
 import type { WafType } from './waf/detector.js'
+import { buildDebugOverlayScript } from './debug-overlay.js'
 
 /**
  * Launch a headless Chromium instance with stealth patches applied.
@@ -51,21 +52,15 @@ export async function navigateWithStealth(
   page: import('playwright').Page,
   url: string,
   timeoutMs: number,
+  options?: { debug?: boolean },
 ): Promise<import('playwright').Response | null> {
-  // Inject baseline + WAF-specific patches before navigation
-  // We use a dummy navigation to detect the WAF, then re-navigate with full patches.
-  // In practice, we inject the combined script upfront — if detection fails,
-  // the baseline patches still provide Cloudflare-level protection.
   const combinedScript = buildCombinedScript('unknown')
-
-  // Note: Full WAF detection requires intercepting the initial response.
-  // For simplicity and reliability, we apply ALL patches at once — the extra
-  // scripts are no-ops when their target WAF isn't present, and they don't
-  // interfere with other WAFs' checks.
-  //
-  // If you need precise per-WAF patching, use the detectWAF() function
-  // separately and call page.addInitScript() with the appropriate script.
   await page.addInitScript(combinedScript)
+
+  // Inject debug overlay when headed mode is active (development only)
+  if (options?.debug ?? false) {
+    await page.addInitScript(buildDebugOverlayScript())
+  }
 
   return page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs })
 }

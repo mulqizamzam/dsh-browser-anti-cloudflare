@@ -136,6 +136,7 @@ async function runOp(
       // For screenshot/click/type/eval: use fresh browser per call (simpler, backward compatible)
       // These operations don't benefit much from session reuse since they navigate fresh each time
       const { launchStealthBrowser } = await import('./stealth.js')
+      const debugMode = config.headless === false
       const browser = await launchStealthBrowser(config)
       try {
         const page = await browser.newPage()
@@ -143,19 +144,19 @@ async function runOp(
         switch (op) {
           case 'screenshot': {
             const fullPage = args.fullPage === true
-            await navigateWithStealth(page, url, timeoutMs)
+            await navigateWithStealth(page, url, timeoutMs, { debug: debugMode })
             const buf = await page.screenshot({ fullPage, type: 'png' })
             return { data: buf.toString('base64'), mimeType: 'image/png', width: page.viewportSize()?.width ?? 1280, height: page.viewportSize()?.height ?? 800 }
           }
           case 'click': {
-            await navigateWithStealth(page, url, timeoutMs)
+            await navigateWithStealth(page, url, timeoutMs, { debug: debugMode })
             const sel = String(args.selector ?? '')
             await page.waitForSelector(sel, { timeout: timeoutMs }).catch(() => {})
             await page.click(sel).catch((e: unknown) => { throw new Error(`click failed: ${String(e)}`) })
             return { success: true, url: page.url() }
           }
           case 'type': {
-            await navigateWithStealth(page, url, timeoutMs)
+            await navigateWithStealth(page, url, timeoutMs, { debug: debugMode })
             const sel = String(args.selector ?? '')
             const txt = String(args.text ?? '')
             await page.waitForSelector(sel, { timeout: timeoutMs }).catch(() => {})
@@ -163,7 +164,7 @@ async function runOp(
             return { success: true, url: page.url() }
           }
           case 'eval': {
-            await navigateWithStealth(page, url, timeoutMs)
+            await navigateWithStealth(page, url, timeoutMs, { debug: debugMode })
             const expr = String(args.expression ?? 'true')
             const result = await page.evaluate(expr)
             return { result }
