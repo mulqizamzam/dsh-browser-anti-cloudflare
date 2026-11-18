@@ -93,7 +93,7 @@ describe.skipIf(process.env.SKIP_INTEGRATION === '1')('integration: real-target 
       const page = await browser!.newPage()
       try {
         await navigateWithStealth(page, target.url, TIMEOUT_MS)
-        const hasRuntime = await page.evaluate(() => typeof chrome !== 'undefined')
+        const hasRuntime = await page.evaluate(() => typeof (window as unknown as Record<string, unknown>).chrome !== 'undefined')
         expect(hasRuntime).toBe(true)
       } finally {
         await page.close()
