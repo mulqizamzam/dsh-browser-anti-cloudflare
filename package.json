@@ -25,6 +25,7 @@
     "build": "tsdown",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:integration": "vitest run tests/integration.test.ts",
     "prepare": "npm run build"
   },
   "files": [
