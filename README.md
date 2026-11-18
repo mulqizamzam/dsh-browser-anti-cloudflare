@@ -24,6 +24,16 @@ dsh plugin --profile <name> add "github:mulqizamzam/nk-browser-anti-cloudflare#m
 
 Replace `<name>` with your profile name (e.g., `web`). The CLI runs `pnpm add` in the profile directory and — because this package declares `dsh.bundle` → `./cordis.patch.yml` — registers the bundle into `dsh.profile.bundles` automatically. No manual manifest editing is needed.
 
+**Important:** Because this package has a `prepare` script (`npm run build`), pnpm requires an explicit `allowBuilds` entry in your profile's `pnpm-workspace.yaml` the first time you install from GitHub. Add this block if it does not already exist:
+
+```yaml
+# In <profile-dir>/pnpm-workspace.yaml
+allowBuilds:
+  '@mulqi/dsh-browser-anti-cloudflare@git+https://github.com/mulqizamzam/nk-browser-anti-cloudflare.git': true
+```
+
+After adding the entry, re-run the `dsh plugin add` command. Subsequent installs do not require this step.
+
 ### From a local checkout
 
 For development or when you want live changes reflected immediately:
