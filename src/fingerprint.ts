@@ -116,8 +116,9 @@ const WEBGL_PROFILES: Record<string, { vendor: string; renderer: string }> = {
 }
 
 export function generateProfile(seed?: number): FingerprintProfile {
+  // Deterministic seed-based selection
   const keys = Object.keys(PROFILES)
-  const idx = seed !== undefined ? seed % keys.length : Math.floor(Math.random() * keys.length)
+  const idx = seed !== undefined ? (seed % keys.length + keys.length) % keys.length : Math.floor(Math.random() * keys.length)
   const base = PROFILES[keys[idx]]
   const wg = WEBGL_PROFILES[base.platform]
 
@@ -197,7 +198,8 @@ export function validateProfile(profile: FingerprintProfile): boolean {
   if (profile.plugins < 1 || profile.plugins > 10) return false
   if (profile.hardwareConcurrency < 2 || profile.hardwareConcurrency > 32) return false
   if (!profile.languages.includes('en')) return false
-  if (!profile.webglRenderer.includes('Google Inc.')) return false
+  if (!profile.webglVendor.includes('Google Inc.')) return false
+  if (!profile.webglRenderer.includes('ANGLE')) return false
   return true
 }
 
