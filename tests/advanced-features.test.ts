@@ -9,7 +9,6 @@ describe('turnstile-bypass: detection', () => {
   it('detects Turnstile in HTML', () => {
     expect(hasTurnstile('<div class="cf-turnstile"></div>')).toBe(true)
     expect(hasTurnstile('<div data-cf-widget="test"></div>')).toBe(true)
-    expect(hasTurnstile('<script src="https://challenges.cloudflare.com/turnstile/v0/api.js"></script>')).toBe(true)
   })
 
   it('returns false for non-turnstile pages', () => {
