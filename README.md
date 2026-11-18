@@ -107,6 +107,7 @@ dsh plugin --profile <name> reload
 - **DSH:** `0.2.1-rc.2` (exact pin via `engines.dsh`)
 - **Playwright:** `^1.65.1`
 - **Browser:** Chromium only — Firefox and WebKit are not supported because stealth patches target Chromium CDP events.
+- **WAFs Supported:** Cloudflare, Akamai, Imperva (Incapsula), Fastly
 
 ## Exclusive slot warning
 
