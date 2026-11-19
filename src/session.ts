@@ -18,6 +18,17 @@ import type { Config } from './index.js'
 import { navigateWithStealth } from './stealth.js'
 import { createProxyManager } from './proxy.js'
 import type { ProxyManager } from './proxy.js'
+import { AccountManager } from './accounts.js'
+import type { AccountConfig } from './accounts.js'
+
+/** Simple deterministic hash for seeding profile selection. */
+function hashString(s: string): number {
+  let h = 0
+  for (let i = 0; i < s.length; i++) {
+    h = ((h << 5) - h + s.charCodeAt(i)) | 0
+  }
+  return Math.abs(h)
+}
 
 /** Serialized session data saved to disk. */
 interface SerializedSession {
@@ -51,6 +62,7 @@ export class SessionManager {
   private config: Required<SessionConfig>
   private sessionId: string
   private proxyMgr: ProxyManager | undefined
+  private accountMgr: AccountManager | null = null
 
   constructor(config: Config) {
     this.config = {
@@ -61,6 +73,18 @@ export class SessionManager {
     }
     this.sessionId = Date.now().toString(36) + Math.random().toString(36).substring(2)
     this.proxyMgr = createProxyManager(config.proxy)
+
+    // Initialize AccountManager if multi-account config provided
+    if (config.accounts && config.accounts.length > 0) {
+      this.accountMgr = new AccountManager('auto', hashString(this.sessionId))
+      for (const acc of config.accounts) {
+        this.accountMgr.register(acc)
+      }
+      // Default to first account
+      if (this.accountMgr.count > 0) {
+        this.accountMgr.setCurrent(this.accountMgr.listAccounts()[0])
+      }
+    }
   }
 
   /** Get the active page for a URL, or create one if needed. */
@@ -107,6 +131,47 @@ export class SessionManager {
   async navigate(url: string, timeoutMs: number): Promise<import('playwright').Response | null> {
     const page = await this.getOrCreatePage(url)
     return navigateWithStealth(page, url, timeoutMs)
+  }
+
+  /** Get or create an isolated context for a specific account. */
+  async getAccountPage(accountId: string, url?: string): Promise<Page> {
+    if (!this.accountMgr) {
+      throw new Error('AccountManager not initialized — no accounts configured')
+    }
+    const ctx = await this.accountMgr.getAccountContext(accountId)
+    let page = this.accountMgr.getAccountState(accountId)?.currentPage
+    if (!page || page.isClosed()) {
+      page = await ctx.newPage()
+      const state = this.accountMgr.getAccountState(accountId)!
+      state.currentPage = page
+    }
+    if (url) {
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 })
+    }
+    return page
+  }
+
+  /** Switch current account. */
+  switchAccount(accountId: string): void {
+    if (!this.accountMgr) {
+      throw new Error('AccountManager not initialized')
+    }
+    this.accountMgr.setCurrent(accountId)
+  }
+
+  /** List all registered accounts. */
+  listAccounts(): string[] {
+    return this.accountMgr?.listAccounts() ?? []
+  }
+
+  /** Get current account ID. */
+  getCurrentAccount(): string | null {
+    return this.accountMgr?.getCurrentId() ?? null
+  }
+
+  /** Check if multi-account mode is active. */
+  hasAccounts(): boolean {
+    return !!this.accountMgr && this.accountMgr.count > 0
   }
 
   /** Save current session state to disk. */
@@ -224,9 +289,16 @@ export class SessionManager {
       await entry.page.close().catch(() => {})
     }
     this.pages.clear()
+    await this.accountMgr?.closeAll().catch(() => {})
     await this.browser?.close().catch(() => {})
     this.browser = null
     this.context = null
+    this.accountMgr = null
+  }
+
+  /** Get AccountManager instance (for external access). */
+  getAccounts(): AccountManager | null {
+    return this.accountMgr
   }
 
   private async ensureBrowser(): Promise<Browser> {

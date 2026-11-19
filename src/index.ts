@@ -35,8 +35,15 @@ export interface Config {
     /** Directory for session files (default: ~/.cache/browser-anti-cloudflare/sessions) */
     sessionDir?: string
   }
-  /** Proxy configuration. When set, all browser connections route through the proxy.
-   * Supports single proxy or rotating pool. */
+  /** Multi-account rotation config. When set, each account gets isolated browser context. */
+  accounts?: Array<{
+    /** Unique account identifier */
+    id: string
+    /** Fingerprint profile: 'auto', 'windows', 'mac', or 'linux' */
+    fingerprint?: 'auto' | 'windows' | 'mac' | 'linux'
+    /** Optional proxy URL for this account */
+    proxyUrl?: string
+  }>
   proxy?: {
     /** Single proxy URL (http:// or socks5://) */
     url?: string
