@@ -10,7 +10,7 @@ import { BrowserUseProviderName } from '@deepseek-ai/dsh-browser-use/brand'
 import { mountAcTools } from './tools.js'
 
 /** Cordis identity for this provider. Must be unique across all browser-use providers. */
-export const name = 'nk-browser-anti-cloudflare'
+export const name = 'dsh-browser-anti-cloudflare'
 
 /** Services required before activation. Matches stagehand-native pattern. */
 export const inject = ['browserUse', 'agents', 'tools', 'systemPrompt']

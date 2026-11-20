@@ -4,7 +4,7 @@ description: >
   Use when building a DeepSeek Harness plugin that provides browser tools with
   anti-detection/stealth capabilities to bypass Cloudflare and similar WAFs.
   Triggers on: "buat plugin browser anti-cloudflare", "browser stealth plugin",
-  "cloudflare bypass DSH plugin", "nk-browser-anti-cloudflare". Symptoms: agent
+  "cloudflare bypass DSH plugin", "dsh-browser-anti-cloudflare". Symptoms: agent
   encounters Cloudflare challenge pages instead of real site content when using
   browser tools. Includes workspace-only dependency handling, exclusive
   browserUse slot management, and DSH verification workflows.
@@ -22,7 +22,7 @@ provider with stealth-patched Chromium capable of bypassing Cloudflare challenge
 | Item | Detail |
 |------|--------|
 | Package name | `@mulqi/dsh-browser-anti-cloudflare` |
-| Plugin identity | `nk-browser-anti-cloudflare` |
+| Plugin identity | `dsh-browser-anti-cloudflare` |
 | DSH pin | `0.2.1-rc.2` (exact, NOT caret) |
 | Provider slot | EXCLUSIVE — only one browser-use provider per profile |
 | Tool prefix | `ac_` (avoids collision with core `browser_*`) |
@@ -79,7 +79,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { BrowserUseProviderName } from '@deepseek-ai/dsh-browser-use/brand'
 import { mountAcTools } from './tools.ts'
 
-export const name = 'nk-browser-anti-cloudflare'
+export const name = 'dsh-browser-anti-cloudflare'
 export const inject = ['browserUse', 'agents', 'tools', 'systemPrompt']
 
 export interface Config {

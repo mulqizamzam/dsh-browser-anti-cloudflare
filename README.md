@@ -19,7 +19,7 @@ All tools require a `url` argument. Each call launches a fresh stealth Chromium 
 ### From GitHub (recommended)
 
 ```bash
-dsh plugin --profile <name> add "github:mulqizamzam/nk-browser-anti-cloudflare#main"
+dsh plugin --profile <name> add "github:mulqizamzam/dsh-browser-anti-cloudflare#main"
 ```
 
 Replace `<name>` with your profile name (e.g., `web`). The CLI runs `pnpm add` in the profile directory and — because this package declares `dsh.bundle` → `./cordis.patch.yml` — registers the bundle into `dsh.profile.bundles` automatically. No manual manifest editing is needed.
@@ -29,7 +29,7 @@ Replace `<name>` with your profile name (e.g., `web`). The CLI runs `pnpm add` i
 ```yaml
 # In <profile-dir>/pnpm-workspace.yaml
 allowBuilds:
-  '@mulqi/dsh-browser-anti-cloudflare@git+https://github.com/mulqizamzam/nk-browser-anti-cloudflare.git': true
+  '@mulqi/dsh-browser-anti-cloudflare@git+https://github.com/mulqizamzam/dsh-browser-anti-cloudflare.git': true
 ```
 
 After adding the entry, re-run the `dsh plugin add` command. Subsequent installs do not require this step.
@@ -40,10 +40,10 @@ For development or when you want live changes reflected immediately:
 
 ```bash
 # Copy the tree into node_modules
-dsh plugin --profile <name> add file:/path/to/nk-browser-anti-cloudflare
+dsh plugin --profile <name> add file:/path/to/dsh-browser-anti-cloudflare
 
 # Or symlink (changes to src/ take effect on next boot without reinstall)
-dsh plugin --profile <name> add link:/path/to/nk-browser-anti-cloudflare
+dsh plugin --profile <name> add link:/path/to/dsh-browser-anti-cloudflare
 ```
 
 Before installing via `file:` or `link:`, run `pnpm install` in the repository so that peer dependencies (`@deepseek-ai/*`) are present. Profile symlinks do not bootstrap deps of the linked package.

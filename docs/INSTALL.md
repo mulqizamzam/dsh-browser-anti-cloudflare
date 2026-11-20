@@ -11,8 +11,8 @@
 ### 1. Clone / place the package
 
 ```bash
-git clone https://github.com/mulqizamzam/nk-browser-anti-cloudflare.git
-cd nk-browser-anti-cloudflare
+git clone https://github.com/mulqizamzam/dsh-browser-anti-cloudflare.git
+cd dsh-browser-anti-cloudflare
 npm install        # installs dependencies + devDependencies (vitest, tsdown)
 ```
 

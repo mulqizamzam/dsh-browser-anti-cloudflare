@@ -9,14 +9,14 @@ Panduan praktis memakai plugin ini untuk bypass Cloudflare dan situs lain yang m
 ### 1. Install ke profil DSH
 
 ```bash
-dsh plugin --profile web add "github:mulqizamzam/nk-browser-anti-cloudflare#main"
+dsh plugin --profile web add "github:mulqizamzam/dsh-browser-anti-cloudflare#main"
 ```
 
 Tambahkan `allowBuilds` di `pnpm-workspace.yaml` profil jika belum ada:
 
 ```yaml
 allowBuilds:
-  '@mulqi/dsh-browser-anti-cloudflare@git+https://github.com/mulqizamzam/nk-browser-anti-cloudflare.git': true
+  '@mulqi/dsh-browser-anti-cloudflare@git+https://github.com/mulqizamzam/dsh-browser-anti-cloudflare.git': true
 ```
 
 ### 2. Reload profil

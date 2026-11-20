@@ -27,7 +27,7 @@ npx vitest run      # 3 integration tests (local HTTP server + headless Chromium
 ## Install from GitHub (one-command, recommended)
 
 ```bash
-dsh plugin --profile <name> add "github:mulqizamzam/nk-browser-anti-cloudflare#main"
+dsh plugin --profile <name> add "github:mulqizamzam/dsh-browser-anti-cloudflare#main"
 ```
 
 The CLI runs `pnpm add` in the profile directory and auto-registers the bundle into
@@ -39,10 +39,10 @@ For development where source changes should take effect on next boot:
 
 ```bash
 # Symlink (recommended for active dev)
-dsh plugin --profile <name> add link:/path/to/nk-browser-anti-cloudflare
+dsh plugin --profile <name> add link:/path/to/dsh-browser-anti-cloudflare
 
 # Or copy the tree
-dsh plugin --profile <name> add file:/path/to/nk-browser-anti-cloudflare
+dsh plugin --profile <name> add file:/path/to/dsh-browser-anti-cloudflare
 ```
 
 Before using `file:` or `link:`, run `pnpm install` in the repository so peer
@@ -74,7 +74,7 @@ deps (`@deepseek-ai/*`) are available.
 
 ## Slot Exclusivity Warning
 
-This plugin calls `ctx.browserUse.register(BrowserUseProviderName('nk-browser-anti-cloudflare'))`
+This plugin calls `ctx.browserUse.register(BrowserUseProviderName('dsh-browser-anti-cloudflare'))`
 inside `apply()`. If the same slot is already held by another provider, Cordis throws at
 registration time and the profile fails to boot. Disable or remove any competing
 `browserUse` provider before installing this one.

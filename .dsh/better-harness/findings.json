@@ -1,0 +1,161 @@
+{
+  "summary": {
+    "projectName": "@mulqi/dsh-browser-anti-cloudflare",
+    "locale": "en",
+    "modelId": "agent-work-loop-v4",
+    "reportContractVersion": 25,
+    "overview": "New DSH browser-use plugin with zero harness infrastructure — no tests, no AGENTS.md, no build scripts, no runtime observability. Five dimensions score low due to missing foundational navigation, validation, and delivery routes.",
+    "dimensions": [
+      {
+        "id": "task-understanding",
+        "label": "Task Understanding",
+        "score": 42,
+        "summary": "No AGENTS.md; agent lacks acceptance boundary from authoritative project source.",
+        "findingRefs": [
+          "no-agent-instructions"
+        ]
+      },
+      {
+        "id": "controlled-execution",
+        "label": "Controlled Execution",
+        "score": 38,
+        "summary": "Build command not defined in package.json; tsdown config exists but without standard script.",
+        "findingRefs": [
+          "no-build-script",
+          "no-install-automation",
+          "exclusive-slot-not-enforced"
+        ]
+      },
+      {
+        "id": "change-validation",
+        "label": "Change Validation",
+        "score": 25,
+        "summary": "Zero test files; zero mechanised lint/typecheck gate. TypeScript strict enabled but not auto-executed.",
+        "findingRefs": [
+          "no-tests-no-verification",
+          "no-build-script"
+        ]
+      },
+      {
+        "id": "reliable-delivery",
+        "label": "Reliable Delivery",
+        "score": 30,
+        "summary": "Installation only manual documentation; zero CI/PR gate; browserUse slot exclusivity only README warning.",
+        "findingRefs": [
+          "no-install-automation",
+          "exclusive-slot-not-enforced"
+        ]
+      },
+      {
+        "id": "learning-capture",
+        "label": "Learning Capture",
+        "score": 35,
+        "summary": "Zero comparable task history; no learning opportunity detected or transformed yet.",
+        "findingRefs": []
+      }
+    ],
+    "aiAgentPractice": {
+      "inspectedSurfaces": [
+        "Rules",
+        "Skills"
+      ],
+      "coverageRows": [
+        {
+          "surface": "Rules",
+          "scopes": [
+            "Project"
+          ],
+          "count": 0,
+          "paths": []
+        },
+        {
+          "surface": "Skills",
+          "scopes": [
+            "Project"
+          ],
+          "count": 1,
+          "paths": [
+            "SKILL.md"
+          ]
+        }
+      ]
+    },
+    "assignmentSummaries": []
+  },
+  "findings": [
+    {
+      "id": "no-agent-instructions",
+      "title": "No AGENTS.md or scoped instruction directs agents to project entrypoints",
+      "severity": "Medium",
+      "reason": "New DSH plugin package lacks AGENTS.md, CLAUDE.md, or any scoped instructions. Agents working in this workspace have no guidance on how to build, test, or install the plugin. README.md describes manual installation but does not connect to agent workflows. Consequence: every task requires manual source code traversal to understand plugin mechanics.",
+      "dimensionRefs": [
+        "task-understanding"
+      ],
+      "aiFixPrompt": "/better-harness fix this issue\n\nCreate AGENTS.md at the package root with: (1) 2-3 line plugin purpose summary, (2) build command: npx tsdown, (3) typecheck command: npx tsc --noEmit, (4) DSH profile install via cordis.patch.yml, (5) browserUse slot exclusivity constraint.",
+      "expectedArtifact": "AGENTS.md",
+      "expectedOutput": [
+        "Agent can find build and install commands without reading full source."
+      ]
+    },
+    {
+      "id": "no-tests-no-verification",
+      "title": "No automated tests for core stealth browser pathways",
+      "severity": "High",
+      "reason": "Source has 3 files (~290 lines) with anti-detection logic (navigator.webdriver patch, WebGL randomization, CDP interception) but zero test files. No verification mechanism is exercised — every code change risks breaking stealth behavior undetected. Consequence: production regressions in anti-detection go unnoticed.",
+      "dimensionRefs": [
+        "change-validation"
+      ],
+      "aiFixPrompt": "/better-harness fix this issue\n\nAdd minimally 3 tests in tests/stealth.test.ts: (1) verify navigator.webdriver is undefined after init script, (2) verify WebGL renderer is neutralized, (3) verify ac_browser_navigate returns title and status. Use Vitest. Add test script to package.json.",
+      "expectedArtifact": "tests/stealth.test.ts + test script in package.json",
+      "expectedOutput": [
+        "npx vitest run tests/stealth.test.ts passes"
+      ]
+    },
+    {
+      "id": "no-build-script",
+      "title": "package.json missing build and typecheck scripts",
+      "severity": "Medium",
+      "reason": "tsdown.config.ts and strict tsconfig.json exist, but package.json defines no build, typecheck, or prepare scripts. Agents lack standard commands to verify TypeScript changes remain compile-safe. Consequence: breaking type changes can reach lib/ undetected.",
+      "dimensionRefs": [
+        "controlled-execution",
+        "change-validation"
+      ],
+      "aiFixPrompt": "/better-harness fix this issue\n\nAdd to package.json scripts: build (tsdown), typecheck (tsc --noEmit), prepare (npm run build). Verify both commands run clean in current workspace.",
+      "expectedArtifact": "package.json updated scripts field",
+      "expectedOutput": [
+        "npm run typecheck exits 0",
+        "npm run build produces lib/"
+      ]
+    },
+    {
+      "id": "no-install-automation",
+      "title": "Plugin installation relies on manual README docs, no automated hook",
+      "severity": "Low",
+      "reason": "README explains manual cordis.patch.yml insert but provides no ready-to-use profile template or helper script. Agents must copy-paste YAML configuration manually — YAML type errors cause silent boot failures. Consequence: high friction for first-time adoption.",
+      "dimensionRefs": [
+        "controlled-execution",
+        "reliable-delivery"
+      ],
+      "aiFixPrompt": "/better-harness fix this issue\n\nAdd scripts/install.sh or docs/INSTALL.md explaining the cordis.patch.yml copy-paste steps to a DSH profile, plus the browserUse slot exclusivity warning.",
+      "expectedArtifact": "scripts/install.sh or docs/INSTALL.md",
+      "expectedOutput": [
+        "Agent can install the plugin with one command or clear document."
+      ]
+    },
+    {
+      "id": "exclusive-slot-not-enforced",
+      "title": "browserUse slot conflict prevention relies on README warning, not technical enforcement",
+      "severity": "Medium",
+      "reason": "Plugin claims exclusive browserUse slot and README warns about conflicts, but no runtime precondition check validates the slot is free before registration. If two providers register simultaneously, errors surface only at boot and are hard to diagnose. Consequence: increased debug time on profile conflicts.",
+      "dimensionRefs": [
+        "controlled-execution",
+        "reliable-delivery"
+      ],
+      "aiFixPrompt": "/better-harness fix this issue\n\nAdd a precondition check in apply() that reads registered providers from ctx and throws a helpful error if browserUse slot is already taken, naming the conflicting provider and how to disable it.",
+      "expectedArtifact": "Precondition guard in src/index.ts",
+      "expectedOutput": [
+        "Informative error message on slot conflict, not generic registration failure."
+      ]
+    }
+  ]
+}
