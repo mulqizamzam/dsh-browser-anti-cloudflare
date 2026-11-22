@@ -51,7 +51,7 @@ jobs:
           git fetch --force --tags origin
           python3 scripts/generate_release_audit.py --tag "${{ steps.release.outputs.tag }}"
 
-      - name: Attach immutable audit assets to the GitHub Release
+      - name: Attach audit assets to the GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.release.outputs.tag }}
