@@ -77,7 +77,7 @@ describe('session-persistence: basic', () => {
     await page.close()
   }, 20000)
 
-  it('session_save writes a valid JSON file', async () => {
+  it('session_save writes authenticated ciphertext', async () => {
     const result = await sessionMgr!.saveSession('test-save')
     expect(existsSync(result.path)).toBe(true)
     expect(typeof result.size).toBe('number')
@@ -85,7 +85,7 @@ describe('session-persistence: basic', () => {
 
     // Session content is authenticated ciphertext, not plaintext JSON.
     const content = readFileSync(result.path, 'utf-8')
-    expect(content.startsWith('BAS1:')).toBe(true)
+    expect(content.startsWith('BAS2:')).toBe(true)
     expect(content).not.toContain('cookies')
   })
 

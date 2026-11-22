@@ -21,7 +21,7 @@ function activeSessionKey(config: SessionCryptoConfig): { id: string; secret: st
     if (!id || !secret || secret.length < 32) throw new Error('Active session encryption key is missing or invalid')
     return { id, secret }
   }
-  if (!config.encryptionKey || config.encryptionKey.length < 32) throw new Error('Session encryption key must contain at least 32 characters')
+  if (!config.encryptionKey || config.encryptionKey.length < 32) throw new Error('session.encryptionKey must contain at least 32 characters')
   return { id: 'legacy', secret: config.encryptionKey }
 }
 function encrypt(payload: string, config: SessionCryptoConfig): string {
@@ -215,7 +215,7 @@ export class SessionManager {
   }
 
   async loadSession(path: string): Promise<boolean> {
-    const secret = this.assertPersistenceEnabled()
+    this.assertPersistenceEnabled()
     const actual = await this.resolveSessionFile(path)
     const decoded = JSON.parse(decrypt(await readFile(actual, 'utf8'), this.config.session!)) as { version: number; accountId?: string | null; state?: StorageState }
     if (![1, 2].includes(decoded.version) || !decoded.state || !Array.isArray(decoded.state.cookies)) throw new Error('Invalid session payload')

@@ -25,7 +25,7 @@ describe('encrypted session persistence', () => {
     try {
       const saved = await manager.saveSession('test')
       const encrypted = await readFile(saved.path, 'utf8')
-      expect(encrypted.startsWith('BAS1:')).toBe(true)
+      expect(encrypted.startsWith('BAS2:')).toBe(true)
       expect(encrypted).not.toContain('"cookies"')
       await expect(manager.loadSession(saved.path)).resolves.toBe(true)
       await expect(manager.loadSession('/etc/passwd')).rejects.toThrow()
