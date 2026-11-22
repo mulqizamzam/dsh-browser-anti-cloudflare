@@ -1,337 +1,138 @@
-/**
- * Session Manager — maintains a persistent browser instance across tool calls.
- *
- * When sessions are enabled, subsequent ac_browser_* calls reuse the same
- * Chromium process and page context, preserving cookies, localStorage, and
- * navigation state. This enables multi-step workflows (navigate → login →
- * interact) without re-authenticating on every call.
- *
- * When sessions are disabled (default), behavior is identical to before:
- * each call spawns a fresh browser.
- */
-
+import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'node:crypto'
+import { mkdir, readFile, writeFile, realpath, lstat } from 'node:fs/promises'
+import { dirname, join, resolve, sep } from 'node:path'
 import { chromium } from 'playwright'
-import type { Browser, Page, BrowserContext, Cookie } from 'playwright'
-import { writeFileSync, readFileSync, existsSync, mkdirSync } from 'fs'
-import { join } from 'path'
+import type { Browser, BrowserContext, Page, StorageState } from 'playwright'
 import type { Config } from './index.js'
 import { navigateWithStealth } from './stealth.js'
 import { createProxyManager } from './proxy.js'
-import type { ProxyManager } from './proxy.js'
 import { AccountManager } from './accounts.js'
-import type { AccountConfig } from './accounts.js'
+import { assertSafeUrl } from './security.js'
 
-/** Simple deterministic hash for seeding profile selection. */
-function hashString(s: string): number {
-  let h = 0
-  for (let i = 0; i < s.length; i++) {
-    h = ((h << 5) - h + s.charCodeAt(i)) | 0
-  }
-  return Math.abs(h)
+const MAGIC = 'BAS1'
+function encrypt(payload: string, secret: string): string {
+  const salt = randomBytes(16), iv = randomBytes(12), key = scryptSync(secret, salt, 32)
+  const cipher = createCipheriv('aes-256-gcm', key, iv)
+  const data = Buffer.concat([cipher.update(payload, 'utf8'), cipher.final()])
+  return [MAGIC, salt.toString('base64'), iv.toString('base64'), cipher.getAuthTag().toString('base64'), data.toString('base64')].join(':')
 }
-
-/** Serialized session data saved to disk. */
-interface SerializedSession {
-  cookies: Cookie[]
-  localStorage: Record<string, string>
-  createdAt: number
+function decrypt(payload: string, secret: string): string {
+  const [magic, salt, iv, tag, data] = payload.split(':')
+  if (magic !== MAGIC || !salt || !iv || !tag || !data) throw new Error('Invalid or unsupported session file')
+  const decipher = createDecipheriv('aes-256-gcm', scryptSync(secret, Buffer.from(salt, 'base64'), 32), Buffer.from(iv, 'base64'))
+  decipher.setAuthTag(Buffer.from(tag, 'base64'))
+  return Buffer.concat([decipher.update(Buffer.from(data, 'base64')), decipher.final()]).toString('utf8')
 }
-
-/** Active page entry in the session pool. */
-interface PageEntry {
-  page: Page
-  url: string
-  createdAt: number
-}
-
-export interface SessionConfig {
-  /** Enable persistent browser sessions (default: false) */
-  enabled: boolean
-  /** Per-session timeout in milliseconds (default: 120000) */
-  timeoutMs?: number
-  /** Max concurrent pages per session (default: 5) */
-  maxPages?: number
-  /** Directory to save session files (default: ~/.cache/browser-anti-cloudflare/sessions) */
-  sessionDir?: string
-}
-
 export class SessionManager {
   private browser: Browser | null = null
   private context: BrowserContext | null = null
-  private pages: Map<string, PageEntry> = new Map()
-  private config: Required<SessionConfig>
-  private sessionId: string
-  private proxyMgr: ProxyManager | undefined
+  private pages = new Map<string, Page>()
   private accountMgr: AccountManager | null = null
-
-  constructor(config: Config) {
-    this.config = {
-      enabled: config.session?.enabled ?? false,
-      timeoutMs: config.session?.timeoutMs ?? 120000,
-      maxPages: config.session?.maxPages ?? 5,
-      sessionDir: config.session?.sessionDir ?? join(process.env.HOME || '/tmp', '.cache', 'browser-anti-cloudflare', 'sessions'),
-    }
-    this.sessionId = Date.now().toString(36) + Math.random().toString(36).substring(2)
+  private proxyMgr
+  private readonly sessionId = randomBytes(12).toString('hex')
+  private readonly sessionDir: string
+  constructor(private readonly config: Config) {
+    this.sessionDir = resolve(config.session?.sessionDir ?? join(process.env.HOME || '/tmp', '.cache', 'browser-anti-cloudflare', 'sessions'))
     this.proxyMgr = createProxyManager(config.proxy)
-
-    // Initialize AccountManager if multi-account config provided
-    if (config.accounts && config.accounts.length > 0) {
-      this.accountMgr = new AccountManager('auto', hashString(this.sessionId))
-      for (const acc of config.accounts) {
-        this.accountMgr.register(acc)
-      }
-      // Default to first account
-      if (this.accountMgr.count > 0) {
-        this.accountMgr.setCurrent(this.accountMgr.listAccounts()[0])
-      }
+    if (config.accounts?.length) {
+      this.accountMgr = new AccountManager(config)
+      for (const account of config.accounts) this.accountMgr.register(account)
+      this.accountMgr.setCurrent(config.accounts[0].id)
     }
   }
-
-  /** Get the active page for a URL, or create one if needed. */
-  async getOrCreatePage(url: string): Promise<Page> {
-    if (!this.config.enabled) {
-      // Fallback: fresh page per call
-      const b = await this.ensureBrowser()
-      return b.newPage()
+  private async ensureContext(): Promise<BrowserContext> {
+    if (this.context) return this.context
+    this.browser = await chromium.launch({ headless: this.config.headless ?? true, executablePath: this.config.executablePath ?? undefined, args: ['--disable-dev-shm-usage', '--disable-gpu'] })
+    const proxy = this.proxyMgr?.getPlaywrightProxy()
+    this.context = await this.browser.newContext({ ...(proxy ? { proxy } : {}) })
+    return this.context
+  }
+  async getPage(url?: string): Promise<Page> {
+    if (this.accountMgr && this.accountMgr.getCurrentId()) {
+      const page = await this.accountMgr.getAccountPage(this.accountMgr.getCurrentId()!)
+      if (url) await assertSafeUrl(url)
+      return page
     }
-
-    // Reuse existing page for same URL
-    for (const [key, entry] of this.pages) {
-      if (entry.url === url) {
-        return entry.page
-      }
-    }
-
-    // Create new page if under limit
-    if (this.pages.size >= this.config.maxPages!) {
-      // Evict oldest page
-      let oldestKey = ''
-      let oldestTime = Infinity
-      for (const [key, entry] of this.pages) {
-        if (entry.createdAt < oldestTime) {
-          oldestTime = entry.createdAt
-          oldestKey = key
-        }
-      }
-      if (oldestKey) {
-        const old = this.pages.get(oldestKey)!
-        await old.page.close().catch(() => {})
-        this.pages.delete(oldestKey)
-      }
-    }
-
-    const ctx = await this.ensureContext()
-    const page = await ctx.newPage()
-    const key = `${url}:${Date.now()}`
-    this.pages.set(key, { page, url, createdAt: Date.now() })
+    let page = this.pages.get('default')
+    if (!page || page.isClosed()) { page = await (await this.ensureContext()).newPage(); this.pages.set('default', page) }
+    if (url) await assertSafeUrl(url)
     return page
   }
-
-  /** Navigate with stealth patches, reusing the session page. */
   async navigate(url: string, timeoutMs: number): Promise<import('playwright').Response | null> {
-    const page = await this.getOrCreatePage(url)
+    const page = await this.getPage()
     return navigateWithStealth(page, url, timeoutMs)
   }
-
-  /** Get or create an isolated context for a specific account. */
-  async getAccountPage(accountId: string, url?: string): Promise<Page> {
-    if (!this.accountMgr) {
-      throw new Error('AccountManager not initialized — no accounts configured')
-    }
-    const ctx = await this.accountMgr.getAccountContext(accountId)
-    let page = this.accountMgr.getAccountState(accountId)?.currentPage
-    if (!page || page.isClosed()) {
-      page = await ctx.newPage()
-      const state = this.accountMgr.getAccountState(accountId)!
-      state.currentPage = page
-    }
-    if (url) {
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 })
-    }
-    return page
+  async screenshot(url: string, timeoutMs: number, fullPage = false): Promise<{ data: string; mimeType: string; width: number; height: number }> {
+    const page = await this.getPage()
+    await navigateWithStealth(page, url, timeoutMs)
+    const data = await page.screenshot({ fullPage, type: 'png' })
+    return { data: data.toString('base64'), mimeType: 'image/png', width: page.viewportSize()?.width ?? 1280, height: page.viewportSize()?.height ?? 800 }
   }
-
-  /** Switch current account. */
-  switchAccount(accountId: string): void {
-    if (!this.accountMgr) {
-      throw new Error('AccountManager not initialized')
-    }
-    this.accountMgr.setCurrent(accountId)
+  async click(url: string, selector: string, timeoutMs: number): Promise<string> {
+    const page = await this.getPage()
+    await navigateWithStealth(page, url, timeoutMs)
+    await page.locator(selector).click({ timeout: timeoutMs })
+    return page.url()
   }
-
-  /** List all registered accounts. */
-  listAccounts(): string[] {
-    return this.accountMgr?.listAccounts() ?? []
+  async type(url: string, selector: string, value: string, timeoutMs: number): Promise<string> {
+    const page = await this.getPage()
+    await navigateWithStealth(page, url, timeoutMs)
+    await page.locator(selector).fill(value, { timeout: timeoutMs })
+    return page.url()
   }
-
-  /** Get current account ID. */
-  getCurrentAccount(): string | null {
-    return this.accountMgr?.getCurrentId() ?? null
+  async evaluate(url: string, expression: string, timeoutMs: number): Promise<unknown> {
+    if (!this.config.allowUnsafeEval) throw new Error('Browser eval is disabled. Set allowUnsafeEval=true only for trusted local workflows.')
+    const page = await this.getPage()
+    await navigateWithStealth(page, url, timeoutMs)
+    return page.evaluate(expression)
   }
-
-  /** Check if multi-account mode is active. */
-  hasAccounts(): boolean {
-    return !!this.accountMgr && this.accountMgr.count > 0
+  async saveSession(label = 'default'): Promise<{ path: string; size: number }> {
+    if (!this.config.session?.enabled) throw new Error('Session persistence is disabled')
+    const secret = this.config.session.encryptionKey
+    if (!secret || secret.length < 32) throw new Error('Session persistence requires session.encryptionKey with at least 32 characters')
+    if (!/^[a-zA-Z0-9_-]{1,48}$/.test(label)) throw new Error('Session label must contain 1–48 letters, numbers, _ or -')
+    const context = await this.ensureContext()
+    const state: StorageState = await context.storageState()
+    await mkdir(this.sessionDir, { recursive: true, mode: 0o700 })
+    const path = join(this.sessionDir, `${label}-${this.sessionId}.session`)
+    const content = encrypt(JSON.stringify({ version: 1, createdAt: Date.now(), state }), secret)
+    await writeFile(path, content, { encoding: 'utf8', mode: 0o600 })
+    return { path, size: Buffer.byteLength(content) }
   }
-
-  /** Save current session state to disk. */
-  async saveSession(label: string = 'default'): Promise<{ path: string; size: number }> {
-    if (!this.config.enabled) {
-      throw new Error('Session persistence is disabled')
-    }
-
-    // Collect cookies from all page contexts
-    const allCookies: Cookie[] = []
-    const seenContexts = new Set<object>()
-    for (const entry of this.pages.values()) {
-      const ctx = entry.page.context()
-      if (seenContexts.has(ctx)) continue
-      seenContexts.add(ctx)
-      try {
-        const urls = entry.page.url()
-        if (urls) {
-          const cookies = await entry.page.context().cookies(urls)
-          allCookies.push(...cookies)
-        }
-      } catch (_) { /* ignore */ }
-    }
-
-    // Also get cookies from the main context if no pages exist
-    if (allCookies.length === 0) {
-      const ctx = await this.ensureContext()
-      try {
-        allCookies.push(...await ctx.cookies())
-      } catch (_) { /* ignore empty context */ }
-    }
-
-    // Collect localStorage from all pages
-    const savedStorage: Record<string, string> = {}
-    for (const entry of this.pages.values()) {
-      try {
-        const storage = await entry.page.evaluate(() => {
-          const result: Record<string, string> = {}
-          const ls = window.localStorage
-          for (let i = 0; i < ls.length; i++) {
-            const key = ls.key(i)
-            if (key) result[key] = ls.getItem(key) || ''
-          }
-          return result
-        })
-        Object.assign(savedStorage, storage)
-      } catch (_) { /* ignore insecure pages */ }
-    }
-
-    const data: SerializedSession = {
-      cookies: allCookies,
-      localStorage: savedStorage,
-      createdAt: Date.now(),
-    }
-
-    const dir = this.config.sessionDir!
-    mkdirSync(dir, { recursive: true })
-    const filename = `${label}-${this.sessionId}.json`
-    const filepath = join(dir, filename)
-
-    const content = JSON.stringify(data, null, 2)
-    writeFileSync(filepath, content, 'utf-8')
-
-    return { path: filepath, size: content.length }
-  }
-
-  /** Load a previously saved session from disk. */
   async loadSession(path: string): Promise<boolean> {
-    if (!existsSync(path)) {
-      return false
-    }
-
-    const content = readFileSync(path, 'utf-8')
-    const data: SerializedSession = JSON.parse(content)
-
-    const ctx = await this.ensureContext()
-
-    // Restore cookies
-    if (data.cookies.length > 0) {
-      try {
-        await ctx.addCookies(data.cookies)
-      } catch (_) {
-        // Some cookies may be domain-restricted; ignore failures
-      }
-    }
-
-    // Restore localStorage on existing pages
-    for (const entry of this.pages.values()) {
-      try {
-        await entry.page.evaluate((storage: Record<string, string>) => {
-          const ls = window.localStorage
-          for (const [key, value] of Object.entries(storage)) {
-            ls.setItem(key, value as string)
-          }
-        }, data.localStorage)
-      } catch (_) { /* ignore insecure pages */ }
-    }
-
+    if (!this.config.session?.enabled) throw new Error('Session persistence is disabled')
+    const secret = this.config.session.encryptionKey
+    if (!secret || secret.length < 32) throw new Error('Session persistence requires session.encryptionKey with at least 32 characters')
+    const requested = resolve(path)
+    const root = await realpath(this.sessionDir).catch(async () => { await mkdir(this.sessionDir, { recursive: true, mode: 0o700 }); return realpath(this.sessionDir) })
+    const actual = await realpath(requested)
+    if (actual !== root && !actual.startsWith(root + sep)) throw new Error('Session path must remain inside the configured session directory')
+    const info = await lstat(actual)
+    if (!info.isFile() || info.isSymbolicLink()) throw new Error('Session path must be a regular file')
+    const decoded = JSON.parse(decrypt(await readFile(actual, 'utf8'), secret))
+    if (decoded.version !== 1 || !decoded.state || !Array.isArray(decoded.state.cookies)) throw new Error('Invalid session payload')
+    await this.context?.close().catch(() => {})
+    this.context = await (await this.ensureBrowser()).newContext({ storageState: decoded.state })
+    for (const page of this.pages.values()) await page.close().catch(() => {})
+    this.pages.clear()
     return true
   }
-
-  /** Get session info. */
-  getInfo() {
-    return {
-      enabled: this.config.enabled,
-      sessionId: this.sessionId,
-      pageCount: this.pages.size,
-      maxPages: this.config.maxPages,
-    }
-  }
-
-  /** Close the browser and clean up. */
-  async close(): Promise<void> {
-    for (const entry of this.pages.values()) {
-      await entry.page.close().catch(() => {})
-    }
-    this.pages.clear()
-    await this.accountMgr?.closeAll().catch(() => {})
-    await this.browser?.close().catch(() => {})
-    this.browser = null
-    this.context = null
-    this.accountMgr = null
-  }
-
-  /** Get AccountManager instance (for external access). */
-  getAccounts(): AccountManager | null {
-    return this.accountMgr
-  }
-
   private async ensureBrowser(): Promise<Browser> {
-    if (!this.browser) {
-      this.browser = await chromium.launch({
-        headless: true,
-        args: [
-          '--disable-blink-features=AutomationControlled',
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-gpu',
-          '--js-flags=--no-wasm-tier-up',
-          '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-        ],
-      })
-    }
+    if (!this.browser) this.browser = await chromium.launch({ headless: this.config.headless ?? true, executablePath: this.config.executablePath ?? undefined, args: ['--disable-dev-shm-usage', '--disable-gpu'] })
     return this.browser
   }
-
-  private async ensureContext(): Promise<BrowserContext> {
-    if (!this.context) {
-      const browser = await this.ensureBrowser()
-      const proxyOpts = this.proxyMgr?.getPlaywrightProxy()
-      this.context = await browser.newContext({
-        viewport: { width: 1920, height: 1080 },
-        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-        deviceScaleFactor: 1,
-        hasTouch: false,
-        isMobile: false,
-        ...(proxyOpts ? { proxy: proxyOpts } : {}),
-      })
-    }
-    return this.context
+  switchAccount(id: string): void { if (!this.accountMgr) throw new Error('No accounts configured'); this.accountMgr.setCurrent(id) }
+  listAccounts(): string[] { return this.accountMgr?.listAccounts() ?? [] }
+  getCurrentAccount(): string | null { return this.accountMgr?.getCurrentId() ?? null }
+  hasAccounts(): boolean { return !!this.accountMgr?.count }
+  getInfo() { return { enabled: this.config.session?.enabled ?? false, sessionId: this.sessionId, pageCount: this.accountMgr ? 0 : [...this.pages.values()].filter(p => !p.isClosed()).length, maxPages: this.config.session?.maxPages ?? 5, currentAccount: this.getCurrentAccount() } }
+  getAccounts(): AccountManager | null { return this.accountMgr }
+  async close(): Promise<void> {
+    for (const page of this.pages.values()) await page.close().catch(() => {})
+    this.pages.clear()
+    await this.accountMgr?.closeAll().catch(() => {})
+    await this.context?.close().catch(() => {})
+    await this.browser?.close().catch(() => {})
+    this.context = null; this.browser = null; this.accountMgr = null
   }
 }
