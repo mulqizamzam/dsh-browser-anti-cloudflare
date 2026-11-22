@@ -18,10 +18,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: pnpm
       - run: pnpm install --no-frozen-lockfile
       - run: pnpm run typecheck
       - run: pnpm run build
+      - run: npx playwright install --with-deps chromium
       - run: pnpm run test
       - name: Verify no unsafe eval enabled by default
         run: |
