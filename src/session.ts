@@ -171,7 +171,6 @@ export class SessionManager {
   }
 
   async saveSession(label = 'default'): Promise<{ path: string; size: number }> {
-    this.touch()
     const secret = this.assertPersistenceEnabled()
     if (!/^[a-zA-Z0-9_-]{1,48}$/.test(label)) throw new Error('Session label must contain 1–48 letters, numbers, _ or -')
     const accountId = this.accountMgr?.getCurrentId() ?? null
@@ -183,11 +182,11 @@ export class SessionManager {
     const path = join(this.sessionDir, `${prefix}${label}-${this.sessionId}.session`)
     const content = encrypt(JSON.stringify({ version: 2, createdAt: Date.now(), accountId, state }), secret)
     await writeFile(path, content, { encoding: 'utf8', mode: 0o600 })
+    this.touch()
     return { path, size: Buffer.byteLength(content) }
   }
 
   async loadSession(path: string): Promise<boolean> {
-    this.touch()
     const secret = this.assertPersistenceEnabled()
     const actual = await this.resolveSessionFile(path)
     const decoded = JSON.parse(decrypt(await readFile(actual, 'utf8'), secret)) as { version: number; accountId?: string | null; state?: StorageState }
@@ -200,12 +199,14 @@ export class SessionManager {
       enforcePageLimit(this.context, this.maxPages)
       for (const page of this.pages.values()) await page.close().catch(() => {})
       this.pages.clear()
+      this.touch()
       return true
     }
     if (decoded.accountId) {
       const current = this.accountMgr?.getCurrentId()
       if (!current || current !== decoded.accountId) throw new Error('Encrypted session belongs to a different account')
       await this.accountMgr!.restoreAccountStorageState(current, decoded.state)
+      this.touch()
       return true
     }
     if (this.accountMgr) throw new Error('A default-context session cannot be restored while account isolation is enabled')
@@ -215,6 +216,7 @@ export class SessionManager {
     enforcePageLimit(this.context, this.maxPages)
     for (const page of this.pages.values()) await page.close().catch(() => {})
     this.pages.clear()
+    this.touch()
     return true
   }
 
