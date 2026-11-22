@@ -1,6 +1,6 @@
 {
   "name": "@mulqi/dsh-browser-anti-cloudflare",
-  "description": "Anti-detection browser-use provider for DeepSeek Harness — stealth Chromium with Cloudflare bypass",
+  "description": "Secure Playwright browser-use provider with URL policy, encrypted sessions, account isolation, and passive WAF detection",
   "version": "0.2.0",
   "publishConfig": {
     "access": "public"
