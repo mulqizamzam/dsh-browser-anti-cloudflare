@@ -39,8 +39,9 @@ export function mountAcTools(ctx: Context, config: Config): () => Promise<void> 
         additionalProperties: false,
       },
       async call(args: Record<string, unknown>) {
-        const timeout = config.operationTimeoutMs ?? 45000
-        switch (op) {
+        return manager.runExclusive(async () => {
+          const timeout = config.operationTimeoutMs ?? 45000
+          switch (op) {
           case 'navigate': {
             const response = await manager.navigate(String(args.url ?? ''), timeout)
             return { url: String(args.url), status: response?.status() ?? 0, waf: await manager.getWaf() }
@@ -51,8 +52,9 @@ export function mountAcTools(ctx: Context, config: Config): () => Promise<void> 
           case 'eval': return { result: await manager.evaluate(String(args.url ?? ''), String(args.expression ?? ''), timeout) }
           case 'session_save': return manager.saveSession(String(args.label ?? 'default'))
           case 'session_load': return { success: await manager.loadSession(String(args.path ?? '')) }
-          case 'session_status': return manager.getInfo()
-        }
+            case 'session_status': return manager.getInfo()
+          }
+        })
       },
     }))
   }
