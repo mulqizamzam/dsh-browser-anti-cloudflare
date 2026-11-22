@@ -132,7 +132,7 @@ describe('proxy-rotation: session integration', () => {
   })
 
   it('session works without proxy (default)', async () => {
-    const mgr = new SessionManager({ headless: true })
+    const mgr = new SessionManager({ headless: true, allowPrivateNetworks: true })
     try {
       const resp = await mgr.navigate(`http://127.0.0.1:${PORT}/`, 10000)
       expect(resp).toBeDefined()
