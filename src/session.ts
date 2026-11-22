@@ -29,6 +29,7 @@ export class SessionManager {
   private pages = new Map<string, Page>()
   private accountMgr: AccountManager | null = null
   private proxyMgr
+  private activeProxy: { server: string; username?: string; password?: string } | undefined
   private readonly sessionId = randomBytes(12).toString('hex')
   private readonly sessionDir: string
   constructor(private readonly config: Config) {
@@ -43,8 +44,8 @@ export class SessionManager {
   private async ensureContext(): Promise<BrowserContext> {
     if (this.context) return this.context
     this.browser = await chromium.launch({ headless: this.config.headless ?? true, executablePath: this.config.executablePath ?? undefined, args: ['--disable-dev-shm-usage', '--disable-gpu'] })
-    const proxy = this.proxyMgr?.getPlaywrightProxy()
-    this.context = await this.browser.newContext({ ...(proxy ? { proxy } : {}) })
+    this.activeProxy = this.proxyMgr?.getPlaywrightProxy()
+    this.context = await this.browser.newContext({ ...(this.activeProxy ? { proxy: this.activeProxy } : {}) })
     return this.context
   }
   async getPage(url?: string): Promise<Page> {
@@ -107,6 +108,8 @@ export class SessionManager {
     if (this.accountMgr) throw new Error('Encrypted session save/load is currently supported only for the default isolated browser context; account-specific persistence is intentionally disabled')
     const requested = resolve(path)
     const root = await realpath(this.sessionDir).catch(async () => { await mkdir(this.sessionDir, { recursive: true, mode: 0o700 }); return realpath(this.sessionDir) })
+    const requestedInfo = await lstat(requested)
+    if (!requestedInfo.isFile() || requestedInfo.isSymbolicLink()) throw new Error('Session path must be a regular non-symlink file')
     const actual = await realpath(requested)
     if (actual !== root && !actual.startsWith(root + sep)) throw new Error('Session path must remain inside the configured session directory')
     const info = await lstat(actual)
@@ -114,7 +117,7 @@ export class SessionManager {
     const decoded = JSON.parse(decrypt(await readFile(actual, 'utf8'), secret))
     if (decoded.version !== 1 || !decoded.state || !Array.isArray(decoded.state.cookies)) throw new Error('Invalid session payload')
     await this.context?.close().catch(() => {})
-    this.context = await (await this.ensureBrowser()).newContext({ storageState: decoded.state })
+    this.context = await (await this.ensureBrowser()).newContext({ storageState: decoded.state, ...(this.activeProxy ? { proxy: this.activeProxy } : {}) })
     for (const page of this.pages.values()) await page.close().catch(() => {})
     this.pages.clear()
     return true
