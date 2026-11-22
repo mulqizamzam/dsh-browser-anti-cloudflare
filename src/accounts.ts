@@ -11,6 +11,7 @@ export interface AccountConfig {
   proxyUrl?: string
   sessionFile?: string
 }
+type StorageState = Awaited<ReturnType<BrowserContext['storageState']>>
 interface AccountState { config: AccountConfig; browser: Browser | null; context: BrowserContext | null; currentPage?: Page }
 export class AccountManager {
   private proxyManager: ProxyManager | undefined
