@@ -72,7 +72,7 @@ describe('stealth init script', () => {
 
   it('ac_browser_navigate returns title and status', async () => {
     const page = await browser!.newPage()
-    const resp = await navigateWithStealth(page, `http://127.0.0.1:${PORT}/`, 10000)
+    const resp = await navigateWithStealth(page, `http://127.0.0.1:${PORT}/`, 10000, { allowPrivateNetworks: true })
     // Wait for the h1 to confirm the page actually rendered after stealth init
     await page.waitForSelector('h1', { timeout: 10000 })
     const result = { url: page.url(), title: await page.title(), status: resp?.status() ?? 0 }
