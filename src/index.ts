@@ -27,6 +27,7 @@ export interface Config {
   }
   accounts?: Array<{ id: string; fingerprint?: 'auto' | 'windows' | 'mac' | 'linux'; proxyUrl?: string }>
   proxy?: { url?: string; urls?: string[]; username?: string; password?: string; rotate?: boolean }
+  observability?: { enabled?: boolean; maxEvents?: number }
 }
 export function apply(ctx: Context, input: Config = {}): void {
   const config: Config = { headless: true, operationTimeoutMs: 45000, ...input }
