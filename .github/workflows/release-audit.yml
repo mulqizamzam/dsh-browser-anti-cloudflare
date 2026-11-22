@@ -1,0 +1,76 @@
+name: Release audit
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing Git release tag to audit
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-audit-${{ github.event.release.tag_name || inputs.release_tag }}
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    name: Generate and attach release audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve release tag
+        id: release
+        env:
+          INPUT_TAG: ${{ inputs.release_tag }}
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          TAG="${EVENT_TAG:-$INPUT_TAG}"
+          if [ -z "$TAG" ]; then
+            echo "No release tag supplied" >&2
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate audit report
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          git fetch --force --tags origin
+          python3 scripts/generate_release_audit.py --tag "${{ steps.release.outputs.tag }}"
+
+      - name: Attach audit assets to the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          for EXT in md json; do
+            ASSET="release-audits/$TAG.$EXT"
+            if gh release view "$TAG" --json assets --jq '.assets[].name' | grep -Fxq "$TAG.$EXT"; then
+              echo "Preserving existing release audit asset: $TAG.$EXT"
+            else
+              gh release upload "$TAG" "$ASSET"
+            fi
+          done
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-audit-${{ steps.release.outputs.tag }}
+          path: |
+            release-audits/${{ steps.release.outputs.tag }}.md
+            release-audits/${{ steps.release.outputs.tag }}.json
+          if-no-files-found: error
+          retention-days: 90
