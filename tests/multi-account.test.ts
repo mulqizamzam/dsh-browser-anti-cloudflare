@@ -11,6 +11,16 @@ describe('account context isolation and lifecycle', () => {
     try { expect(manager.listAccounts()).toEqual(['alice', 'bob']); expect(manager.getCurrentAccount()).toBe('alice'); manager.switchAccount('bob'); expect(manager.getCurrentAccount()).toBe('bob') }
     finally { await manager.close() }
   })
+  it('validates account proxy overrides during registration', async () => {
+    const manager = new SessionManager({ headless: true })
+    try {
+      expect(() => manager.getAccounts()).toBeNull()
+      const accounts = new (await import('../src/accounts.js')).AccountManager()
+      expect(() => accounts.register({ id: 'bad-proxy', proxyUrl: 'file:///tmp/proxy' })).toThrow(/Proxy must be/)
+      expect(() => accounts.register({ id: 'embedded-auth', proxyUrl: 'http://user:pass@proxy.example:8080' })).toThrow(/credentials/)
+      expect(() => accounts.register({ id: 'socks-proxy', proxyUrl: 'socks5://proxy.example:1080' })).not.toThrow()
+    } finally { await manager.close() }
+  })
   it('closes accounts safely before lazy browser initialization', async () => {
     const manager = new SessionManager({ headless: true, accounts: [{ id: 'unused' }] })
     await expect(manager.close()).resolves.toBeUndefined()
