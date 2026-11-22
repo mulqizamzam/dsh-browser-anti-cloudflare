@@ -1,5 +1,5 @@
 import { chromium } from 'playwright'
-import type { Browser, BrowserContext, Page, StorageState } from 'playwright'
+import type { Browser, BrowserContext, Page } from 'playwright'
 import type { Config } from './index.js'
 import { createProxyManager } from './proxy.js'
 import type { ProxyManager } from './proxy.js'
