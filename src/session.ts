@@ -1,6 +1,6 @@
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'node:crypto'
 import { mkdir, readFile, writeFile, realpath, lstat } from 'node:fs/promises'
-import { dirname, join, resolve, sep } from 'node:path'
+import { join, resolve, sep }
 import { chromium } from 'playwright'
 import type { Browser, BrowserContext, Page, StorageState } from 'playwright'
 import type { Config } from './index.js'
@@ -64,7 +64,7 @@ export class SessionManager {
   }
   async screenshot(url: string, timeoutMs: number, fullPage = false): Promise<{ data: string; mimeType: string; width: number; height: number }> {
     const page = await this.getPage()
-    await navigateWithStealth(page, url, timeoutMs)
+    await navigateWithStealth(page, url, timeoutMs, { allowPrivateNetworks: this.config.allowPrivateNetworks })
     const data = await page.screenshot({ fullPage, type: 'png' })
     return { data: data.toString('base64'), mimeType: 'image/png', width: page.viewportSize()?.width ?? 1280, height: page.viewportSize()?.height ?? 800 }
   }
@@ -91,6 +91,7 @@ export class SessionManager {
     const secret = this.config.session.encryptionKey
     if (!secret || secret.length < 32) throw new Error('Session persistence requires session.encryptionKey with at least 32 characters')
     if (!/^[a-zA-Z0-9_-]{1,48}$/.test(label)) throw new Error('Session label must contain 1–48 letters, numbers, _ or -')
+    if (this.accountMgr) throw new Error('Encrypted session save/load is currently supported only for the default isolated browser context; account-specific persistence is intentionally disabled')
     const context = await this.ensureContext()
     const state: StorageState = await context.storageState()
     await mkdir(this.sessionDir, { recursive: true, mode: 0o700 })
@@ -103,6 +104,7 @@ export class SessionManager {
     if (!this.config.session?.enabled) throw new Error('Session persistence is disabled')
     const secret = this.config.session.encryptionKey
     if (!secret || secret.length < 32) throw new Error('Session persistence requires session.encryptionKey with at least 32 characters')
+    if (this.accountMgr) throw new Error('Encrypted session save/load is currently supported only for the default isolated browser context; account-specific persistence is intentionally disabled')
     const requested = resolve(path)
     const root = await realpath(this.sessionDir).catch(async () => { await mkdir(this.sessionDir, { recursive: true, mode: 0o700 }); return realpath(this.sessionDir) })
     const actual = await realpath(requested)
