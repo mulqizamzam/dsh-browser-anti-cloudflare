@@ -3,7 +3,7 @@ import { assertSafeUrl, validateSelector, validateTextInput } from '../src/secur
 
 describe('browser input security', () => {
   it('accepts public HTTP(S) URL', async () => {
-    await expect(assertSafeUrl('https://example.com')).resolves.toBeInstanceOf(URL)
+    await expect(assertSafeUrl('https://1.1.1.1')).resolves.toBeInstanceOf(URL)
   })
   it.each(['file:///etc/passwd','javascript:alert(1)','http://localhost','http://127.0.0.1','http://169.254.169.254','http://192.168.1.1','http://[::1]'])('blocks unsafe URL %s', async url => {
     await expect(assertSafeUrl(url)).rejects.toThrow()
