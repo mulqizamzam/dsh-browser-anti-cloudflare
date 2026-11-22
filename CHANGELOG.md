@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Added bounded in-memory diagnostics with operation durations, error counts, WAF observations, and lifecycle events.
+- Added `ac_browser_diagnostics` and configurable diagnostic history size.
+- Added regression coverage for diagnostic retention/privacy and serialized browser operations.
+
+### Fixed
+- Serialized stateful browser tool calls to prevent overlapping operations from mutating a shared page/context.
+- Validated account-specific proxy URLs during account registration rather than first use.
+
+### Documentation
+- Replaced outdated challenge-evasion skill guidance with the current authorized automation contract.
+- Corrected account-bound encrypted session documentation and recorded a source-backed engineering audit.
+
 ## [0.3.0] — 2026-11-22
 
 ### Security and reliability
