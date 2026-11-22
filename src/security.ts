@@ -28,20 +28,21 @@ function blockedAddress(address: string): boolean {
 }
 
 /** Fail-closed SSRF guard for browser navigation and subresource requests. */
-export async function assertSafeUrl(input: string): Promise<URL> {
+export async function assertSafeUrl(input: string, allowPrivateNetworks = false): Promise<URL> {
   let url: URL
   try { url = new URL(input) } catch { throw new Error('Invalid URL') }
   if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Only HTTP(S) URLs are allowed')
   if (url.username || url.password) throw new Error('URL credentials are not allowed')
   const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '')
-  if (!hostname || hostname === 'localhost' || hostname.endsWith('.localhost') ||
-      hostname.endsWith('.local') || hostname.endsWith('.internal')) {
+  if (!hostname || (!allowPrivateNetworks && (hostname === 'localhost' || hostname.endsWith('.localhost') ||
+      hostname.endsWith('.local') || hostname.endsWith('.internal')))) {
     throw new Error('Local and internal hostnames are blocked')
   }
   if (isIP(hostname)) {
-    if (blockedAddress(hostname)) throw new Error('Private or reserved IP addresses are blocked')
+    if (!allowPrivateNetworks && blockedAddress(hostname)) throw new Error('Private or reserved IP addresses are blocked')
     return url
   }
+  if (allowPrivateNetworks) return url
   let records
   try { records = await lookup(hostname, { all: true, verbatim: true }) }
   catch { throw new Error('Hostname DNS resolution failed; request blocked') }
