@@ -47,7 +47,7 @@ def main() -> int:
             "log", "--reverse", "--format=%H%x09%an%x09%aI%x09%s", revision_range
         )
     else:
-        changed = git_lines("show", "--format=", "--name-status", tag)
+        changed = git_lines("log", "--format=", "--name-status", tag)
         commits_raw = git_lines(
             "log", "--reverse", "--format=%H%x09%an%x09%aI%x09%s", tag
         )
