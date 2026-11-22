@@ -123,6 +123,7 @@ export class SessionManager {
     if (!this.browser) this.browser = await chromium.launch({ headless: this.config.headless ?? true, executablePath: this.config.executablePath ?? undefined, args: ['--disable-dev-shm-usage', '--disable-gpu'] })
     return this.browser
   }
+  async getAccountPage(id: string, url?: string): Promise<Page> { if (!this.accountMgr) throw new Error('No accounts configured'); return this.accountMgr.getAccountPage(id, url) }
   switchAccount(id: string): void { if (!this.accountMgr) throw new Error('No accounts configured'); this.accountMgr.setCurrent(id) }
   listAccounts(): string[] { return this.accountMgr?.listAccounts() ?? [] }
   getCurrentAccount(): string | null { return this.accountMgr?.getCurrentId() ?? null }
