@@ -42,7 +42,7 @@ The package claims the exclusive browserUse provider slot. Disable competing bro
       enabled: true
       timeoutMs: 900000
       maxPages: 5
-      encryptionKey: \${BROWSER_SESSION_KEY}
+      encryptionKey: ${BROWSER_SESSION_KEY}
 
 ## WAF detection
 WAF detection is passive and informational. It inspects response headers and page content for known provider signals. It does not modify browser identity, forge challenge tokens, or alter access-control flows. A classification is best-effort, not proof that access is permitted.
