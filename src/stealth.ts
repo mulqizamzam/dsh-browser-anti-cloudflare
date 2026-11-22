@@ -13,7 +13,7 @@ export async function launchStealthBrowser(config: Config): Promise<Browser> {
 }
 
 /** Navigate only to public HTTP(S) destinations; block private-network subrequests and redirects. */
-export async function navigateWithStealth(page: Page, url: string, timeoutMs: number, options: { allowPrivateNetworks?: boolean } = {}): Promise<Response | null> {
+export async function navigateWithStealth(page: Page, url: string, timeoutMs: number, options: { allowPrivateNetworks?: boolean; debug?: boolean } = {}): Promise<Response | null> {
   await assertSafeUrl(url, options.allowPrivateNetworks)
   await page.context().unroute('**/*').catch(() => {})
   await page.context().route('**/*', async route => {
