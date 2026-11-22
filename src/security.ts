@@ -44,7 +44,7 @@ export async function assertSafeUrl(input: string, allowPrivateNetworks = false)
     return url
   }
   if (allowPrivateNetworks) return url
-  let records: Awaited<ReturnType<typeof lookup>>
+  let records: Array<{ address: string; family: number }>
   try { records = await lookup(hostname, { all: true, verbatim: true }) }
   catch { throw new Error('Hostname DNS resolution failed; request blocked') }
   if (!records.length || records.some(record => blockedAddress(record.address))) {
