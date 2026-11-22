@@ -2,7 +2,7 @@ import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'node:
 import { mkdir, readFile, writeFile, realpath, lstat, chmod } from 'node:fs/promises'
 import { join, resolve, sep } from 'node:path'
 import { chromium } from 'playwright'
-import type { Browser, BrowserContext, Page, StorageState } from 'playwright'
+import type { Browser, BrowserContext, Page } from 'playwright'
 import type { Config } from './index.js'
 import { navigateWithStealth } from './stealth.js'
 import { createProxyManager } from './proxy.js'
@@ -25,6 +25,8 @@ function decrypt(payload: string, secret: string): string {
   decipher.setAuthTag(Buffer.from(tag, 'base64'))
   return Buffer.concat([decipher.update(Buffer.from(data, 'base64')), decipher.final()]).toString('utf8')
 }
+
+type StorageState = Awaited<ReturnType<BrowserContext['storageState']>>
 
 export class SessionManager {
   private browser: Browser | null = null
