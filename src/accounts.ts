@@ -30,7 +30,7 @@ export class AccountManager {
       ? createProxyManager({ url: state.config.proxyUrl })?.getPlaywrightProxy()
       : this.proxyManager?.getPlaywrightProxy()
     try {
-      const context = await browser.newContext({ ...(proxy ? { proxy } : {}) })
+      const context = await browser.newContext({ serviceWorkers: 'block', ...(proxy ? { proxy } : {}) })
       state.browser = browser; state.context = context
       return context
     } catch (error) { await browser.close(); throw error }
