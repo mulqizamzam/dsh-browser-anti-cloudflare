@@ -68,6 +68,25 @@ def main() -> int:
     if event_path and pathlib.Path(event_path).is_file():
         event = json.loads(pathlib.Path(event_path).read_text(encoding="utf-8"))
     release = event.get("release") or {}
+    # Tag-push release workflows are triggered by a push event, not a release event.
+    # Query the already-created GitHub Release so publisher metadata is still captured.
+    try:
+        release_json = subprocess.check_output(
+            ["gh", "release", "view", tag, "--json", "url,author,publishedAt"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
+        gh_release = json.loads(release_json)
+        release = {
+            **release,
+            "html_url": release.get("html_url") or gh_release.get("url"),
+            "author": release.get("author") or gh_release.get("author"),
+            "publisher": release.get("publisher") or gh_release.get("author"),
+            "published_at": release.get("published_at") or gh_release.get("publishedAt"),
+        }
+    except (FileNotFoundError, subprocess.CalledProcessError, json.JSONDecodeError):
+        pass
+
     repository = os.environ.get("GITHUB_REPOSITORY", "")
     server = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
     run_id = os.environ.get("GITHUB_RUN_ID", "")
