@@ -65,6 +65,7 @@ export class SessionManager {
   private lastActivityAt = Date.now()
   private idleTimer: ReturnType<typeof setTimeout> | undefined
   private closed = false
+  private operationQueue: Promise<void> = Promise.resolve()
 
   constructor(private readonly config: Config) {
     this.sessionDir = resolve(config.session?.sessionDir ?? join(process.env.HOME || '/tmp', '.cache', 'browser-anti-cloudflare', 'sessions'))
@@ -77,6 +78,21 @@ export class SessionManager {
       this.accountMgr = new AccountManager(config)
       for (const account of config.accounts) this.accountMgr.register(account)
       this.accountMgr.setCurrent(config.accounts[0].id)
+    }
+  }
+
+  /** Serialize stateful operations that share a browser context or page. */
+  async runExclusive<T>(operation: () => Promise<T>): Promise<T> {
+    if (this.closed) throw new Error('Browser session manager is closed')
+    let release!: () => void
+    const previous = this.operationQueue
+    this.operationQueue = new Promise<void>(resolve => { release = resolve })
+    await previous
+    try {
+      if (this.closed) throw new Error('Browser session manager is closed')
+      return await operation()
+    } finally {
+      release()
     }
   }
 
@@ -297,6 +313,7 @@ export class SessionManager {
   async close(): Promise<void> {
     this.closed = true
     if (this.idleTimer) clearTimeout(this.idleTimer)
+    await this.operationQueue
     await this.closeRuntime()
     this.accountMgr = null
   }
