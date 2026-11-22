@@ -55,6 +55,14 @@ docs/                 # installation, usage, audit, and feature records
 - Turnstile detection is passive. No challenge token is generated or forged.
 - The current tool surface is defined by `src/tools.ts`; consult that file rather than relying on old tool-count assumptions.
 
+## Runtime diagnostics
+
+- Use `observability.enabled` to enable/disable in-memory event collection.
+- `observability.maxEvents` controls the bounded history (1–1000; default 100).
+- `ac_browser_diagnostics` returns event counts, error counts, and recent events.
+- Keep diagnostic attributes allowlisted and privacy-safe; never add URLs, selectors, form values, page content, session paths, account identifiers, or credentials.
+- The event history is process-local and does not imply external telemetry delivery.
+
 ## Development workflow
 
 1. Inspect the current source, tests, and docs before editing.
