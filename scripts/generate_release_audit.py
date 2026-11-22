@@ -29,7 +29,13 @@ def main() -> int:
 
     tag = args.tag
     # Reject option-like or malformed tag names before passing them to git.
-    if not tag or tag.startswith("-") or git("check-ref-format", f"refs/tags/{tag}") != "":
+    valid_tag = bool(tag) and not tag.startswith("-") and subprocess.run(
+        ["git", "check-ref-format", f"refs/tags/{tag}"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    ).returncode == 0
+    if not valid_tag:
         print(f"Invalid Git tag: {tag!r}", file=sys.stderr)
         return 2
 
@@ -130,8 +136,9 @@ def main() -> int:
 
     output_dir = pathlib.Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    json_path = output_dir / f"{tag}.json"
-    md_path = output_dir / f"{tag}.md"
+    safe_tag = tag.replace("/", "__")
+    json_path = output_dir / f"{safe_tag}.json"
+    md_path = output_dir / f"{safe_tag}.md"
     json_path.write_text(json.dumps(record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
     lines = [
