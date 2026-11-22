@@ -1,116 +1,37 @@
-/**
- * Proxy Manager — handles HTTP/SOCKS5 proxy configuration and round-robin rotation.
- *
- * When a proxy is configured, all browser contexts are created with the specified
- * proxy. If multiple proxies are provided, they are rotated via round-robin across
- * sessions to distribute load and reduce IP flagging risk.
- */
-
-export interface ProxyConfig {
-  /** Proxy URL: http://user:pass@host:port or socks5://host:port */
-  url: string
-  /** Optional username for auth */
-  username?: string
-  /** Optional password for auth */
-  password?: string
-}
-
-export interface ProxyManagerConfig {
-  proxies: ProxyConfig[]
-  /** Enable round-robin rotation (default: true when multiple proxies) */
-  rotate?: boolean
-}
+export interface ProxyConfig { url: string; username?: string; password?: string }
+export interface ProxyManagerConfig { proxies: ProxyConfig[]; rotate?: boolean }
 
 export class ProxyManager {
-  private readonly config: Required<ProxyManagerConfig>
-  private currentIndex = 0
-
+  private index = 0
+  private readonly rotate: boolean
+  private readonly proxies: ProxyConfig[]
   constructor(config: ProxyManagerConfig) {
-    if (!config.proxies || config.proxies.length === 0) {
-      throw new Error('ProxyManager requires at least one proxy URL')
-    }
-    this.config = {
-      proxies: config.proxies,
-      rotate: config.rotate ?? (config.proxies.length > 1),
-    }
+    if (!config.proxies?.length) throw new Error('At least one proxy is required')
+    this.proxies = config.proxies.map(p => {
+      const parsed = new URL(p.url)
+      if (!['http:', 'https:', 'socks5:'].includes(parsed.protocol) || !parsed.hostname || !parsed.port)
+        throw new Error('Proxy must be an explicit HTTP(S) or SOCKS5 URL with host and port')
+      if (parsed.username || parsed.password) throw new Error('Put proxy credentials in username/password fields')
+      return { ...p, url: parsed.origin }
+    })
+    this.rotate = config.rotate ?? this.proxies.length > 1
   }
-
-  /** Get the current proxy config (respects rotation). */
   getCurrent(): ProxyConfig {
-    if (!this.config.rotate || this.config.proxies.length === 1) {
-      return this.config.proxies[0]
-    }
-    const proxy = this.config.proxies[this.currentIndex % this.config.proxies.length]
-    this.currentIndex++
-    return proxy
+    const item = this.proxies[this.rotate ? this.index++ % this.proxies.length : 0]
+    return { ...item }
   }
-
-  /** Reset rotation index (call between sessions). */
-  reset(): void {
-    this.currentIndex = 0
-  }
-
-  /** Number of configured proxies. */
-  get count(): number {
-    return this.config.proxies.length
-  }
-
-  /** Check if rotation is active. */
-  get isRotating(): boolean {
-    return this.config.rotate && this.config.proxies.length > 1
-  }
-
-  /** Format proxy string for Playwright (url with optional auth). */
-  formatForPlaywright(): string | undefined {
-    if (this.config.proxies.length === 0) return undefined
-    const p = this.config.proxies[0]
-    if (p.username && p.password) {
-      const url = new URL(p.url)
-      url.username = p.username
-      url.password = p.password
-      return url.toString()
-    }
-    return p.url
-  }
-
-  /** Get proxy object for Playwright Browser.newContext(). */
+  reset(): void { this.index = 0 }
+  get count(): number { return this.proxies.length }
+  get isRotating(): boolean { return this.rotate && this.proxies.length > 1 }
   getPlaywrightProxy(): { server: string; username?: string; password?: string } | undefined {
-    if (this.config.proxies.length === 0) return undefined
-    const p = this.config.proxies[0]
-    return {
-      server: p.url,
-      ...(p.username ? { username: p.username } : {}),
-      ...(p.password ? { password: p.password } : {}),
-    }
+    const p = this.getCurrent()
+    return { server: p.url, ...(p.username ? { username: p.username } : {}), ...(p.password ? { password: p.password } : {}) }
   }
 }
 
-/** Parse proxy config from plugin Config. Returns undefined if no proxy configured. */
-export function createProxyManager(proxyConfig?: {
-  url?: string
-  urls?: string[]
-  username?: string
-  password?: string
-}): ProxyManager | undefined {
-  if (!proxyConfig) return undefined
-
-  // Single URL format: { url: 'http://...' }
-  if (proxyConfig.url) {
-    return new ProxyManager({
-      proxies: [{ url: proxyConfig.url, username: proxyConfig.username, password: proxyConfig.password }],
-    })
-  }
-
-  // Multiple URLs format: { urls: ['http://...', 'http://...'] }
-  if (proxyConfig.urls && proxyConfig.urls.length > 0) {
-    return new ProxyManager({
-      proxies: proxyConfig.urls.map(u => ({
-        url: u,
-        username: proxyConfig.username,
-        password: proxyConfig.password,
-      })),
-    })
-  }
-
-  return undefined
+export function createProxyManager(config?: { url?: string; urls?: string[]; username?: string; password?: string; rotate?: boolean }): ProxyManager | undefined {
+  if (!config) return undefined
+  const urls = config.url ? [config.url] : config.urls ?? []
+  if (!urls.length) return undefined
+  return new ProxyManager({ proxies: urls.map(url => ({ url, username: config.username, password: config.password })), rotate: config.rotate })
 }
