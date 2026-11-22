@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] — 2026-11-22
+
+### Security and reliability
+- Added fail-closed HTTP(S) URL validation, DNS address checks, and request routing for navigation, redirects, and subresources.
+- Added opt-in-only private-network access for isolated local tests.
+- Disabled arbitrary page evaluation by default.
+- Encrypted session snapshots with AES-256-GCM; restricted labels, storage paths, and filesystem permissions.
+- Unified navigation, screenshot, click, type, and evaluation around a shared SessionManager page/context.
+- Corrected account context lifecycle and per-account/global proxy selection.
+- Replaced WAF patch injection and Turnstile token simulation with passive detection.
+- Disabled browser fingerprint spoofing; retain profile generation only as diagnostic metadata.
+- Added security regression tests and production-readiness CI checks.
+- Account-specific session export/import is explicitly unsupported until isolated encrypted restore is implemented.
+
+### Compatibility notes
+- This release intentionally removes challenge-bypass behavior and fake Turnstile completion.
+- Set session.encryptionKey (at least 32 characters) when session persistence is enabled.
+- Set allowUnsafeEval=true only for trusted workflows.
+- Never enable allowPrivateNetworks for untrusted inputs.
+
 ## [0.2.0] — 2026-11-19
 
 ### Added
