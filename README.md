@@ -16,7 +16,7 @@ The package claims the exclusive browserUse provider slot. Disable competing bro
 
 ## Security defaults
 - Only HTTP(S) URLs are accepted.
-- Loopback, private, link-local, reserved, and internal hostnames/IPs are blocked. DNS answers and subresource/redirect requests are checked.
+- Loopback, private, link-local, reserved, and internal hostnames/IPs are blocked. DNS answers and subresource/redirect requests are checked; service workers are disabled in managed contexts.
 - `allowPrivateNetworks` defaults to `false`; enable only in isolated local tests with trusted inputs.
 - `ac_browser_eval` is disabled unless `allowUnsafeEval: true` is explicitly configured.
 - The same in-memory browser context is reused across tool calls. Disk session persistence requires `session.encryptionKey` (at least 32 characters); files use AES-256-GCM and restrictive permissions.
