@@ -29,10 +29,10 @@ export function apply(ctx: Context, input: Config = {}): void {
   if (config.session?.enabled && (!config.session.encryptionKey || config.session.encryptionKey.length < 32))
     throw new Error('session.encryptionKey (minimum 32 characters) is required when session persistence is enabled')
   if (ctx.browserUse.providerName !== undefined)
-    throw new Error(\`[\${name}] browserUse slot is already taken by: \${ctx.browserUse.providerName}\`)
+    throw new Error(\`[${name}] browserUse slot is already taken by: ${ctx.browserUse.providerName}\`)
   ctx.effect(function* () {
     yield ctx.browserUse.register(BrowserUseProviderName(name))
     yield mountAcTools(ctx, config)
-  }, \`\${name}.runtime\`)
+  }, \`${name}.runtime\`)
 }
 export function hello(): string { return 'ok' }
