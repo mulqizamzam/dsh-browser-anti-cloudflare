@@ -68,6 +68,7 @@ export class SessionManager {
 
   private async expireIfIdle(): Promise<void> {
     if (this.closed || this.idleTimeoutMs <= 0) return
+    this.idleTimer = undefined
     const remaining = this.idleTimeoutMs - (Date.now() - this.lastActivityAt)
     if (remaining > 0) {
       this.idleTimer = setTimeout(() => { void this.expireIfIdle() }, remaining)
@@ -78,12 +79,18 @@ export class SessionManager {
   }
 
   private async closeRuntime(): Promise<void> {
-    for (const page of this.pages.values()) await page.close().catch(() => {})
+    const pages = [...this.pages.values()]
     this.pages.clear()
-    await this.accountMgr?.closeContexts().catch(() => {})
-    await this.context?.close().catch(() => {})
-    await this.browser?.close().catch(() => {})
-    this.context = null; this.browser = null
+    const context = this.context
+    const browser = this.browser
+    this.context = null
+    this.browser = null
+    await Promise.all([
+      ...pages.map(page => page.close().catch(() => {})),
+      this.accountMgr?.closeContexts().catch(() => Promise.resolve()),
+      context?.close().catch(() => {}),
+      browser?.close().catch(() => {}),
+    ])
   }
 
   private async ensureContext(): Promise<BrowserContext> {
@@ -248,6 +255,9 @@ export class SessionManager {
   }
 
   getInfo() {
+    if (!this.closed && this.idleTimeoutMs > 0 && Date.now() - this.lastActivityAt >= this.idleTimeoutMs) {
+      void this.expireIfIdle()
+    }
     const pageCount = this.accountMgr ? this.accountMgr.getPageCount() : [...this.pages.values()].filter(p => !p.isClosed()).length
     return {
       enabled: this.config.session?.enabled ?? false,
