@@ -6,6 +6,9 @@ on:
     branches: [main, master, hardening/secure-session-production-gates]
 permissions:
   contents: read
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   quality:
     name: Build, typecheck, security regression
