@@ -11,6 +11,8 @@ export interface Config {
   executablePath?: string
   /** Explicit opt-in for trusted JavaScript execution inside page context. */
   allowUnsafeEval?: boolean
+  /** Explicit development-only opt-in for loopback/private destinations. Never enable for untrusted inputs. */
+  allowPrivateNetworks?: boolean
   session?: {
     enabled?: boolean
     timeoutMs?: number
