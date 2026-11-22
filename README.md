@@ -1,204 +1,38 @@
-# @mulqi/dsh-browser-anti-cloudflare
+# Browser Automation Provider
 
-Anti-detection browser-use provider for DeepSeek Harness. Passes Cloudflare "Checking your browser" challenges by stripping `navigator.webdriver`, randomising WebGL/renderer fingerprints, and injecting anti-bot scripts before every navigation.
+A Playwright browser-use provider for authorized automation. Features include public-web navigation, screenshots, form interaction, passive WAF classification, account-isolated contexts, and encrypted session persistence.
+
+**This package does not bypass Cloudflare, CAPTCHA, Turnstile, or other access controls.** Use the site's approved verification flow or authorized API.
+
+## Security defaults
+- Only HTTP(S) URLs are accepted.
+- Loopback, private, link-local, reserved, and internal hostnames/IPs are blocked. DNS answers and subresource/redirect requests are checked.
+- `allowPrivateNetworks` defaults to `false`; enable only in isolated local tests with trusted inputs.
+- `ac_browser_eval` is disabled unless `allowUnsafeEval: true` is explicitly configured.
+- Session persistence requires `session.encryptionKey` (at least 32 characters). Files use AES-256-GCM and restrictive permissions.
+- Session export/import is disabled with account isolation until per-account encrypted restore is implemented.
+- Supply proxy credentials through secrets, not embedded URLs.
 
 ## Tools
-
-| Tool | Description |
-|------|-------------|
-| `ac_browser_navigate` | Navigate to a URL with stealth patches applied. Returns `{ url, title, status }`. |
-| `ac_browser_screenshot` | Capture a screenshot of the stealth page. Returns base64 PNG data. Supports `fullPage`. |
-| `ac_browser_click` | Click an element by CSS selector after navigating to the URL. |
-| `ac_browser_type` | Type text into an input element identified by CSS selector. |
-| `ac_browser_eval` | Evaluate JavaScript in page context and return the result. |
-
-All tools require a `url` argument. Each call launches a fresh stealth Chromium instance, performs the operation, then tears it down — keeping state minimal and avoiding cross-call leaks.
-
-## Installation
-
-### From GitHub (recommended)
-
-```bash
-dsh plugin --profile <name> add "github:mulqizamzam/dsh-browser-anti-cloudflare#main"
-```
-
-Replace `<name>` with your profile name (e.g., `web`). The CLI runs `pnpm add` in the profile directory and — because this package declares `dsh.bundle` → `./cordis.patch.yml` — registers the bundle into `dsh.profile.bundles` automatically. No manual manifest editing is needed.
-
-**Important:** Because this package has a `prepare` script (`npm run build`), pnpm requires an explicit `allowBuilds` entry in your profile's `pnpm-workspace.yaml` the first time you install from GitHub. Add this block if it does not already exist:
-
-```yaml
-# In <profile-dir>/pnpm-workspace.yaml
-allowBuilds:
-  '@mulqi/dsh-browser-anti-cloudflare@git+https://github.com/mulqizamzam/dsh-browser-anti-cloudflare.git': true
-```
-
-After adding the entry, re-run the `dsh plugin add` command. Subsequent installs do not require this step.
-
-### From a local checkout
-
-For development or when you want live changes reflected immediately:
-
-```bash
-# Copy the tree into node_modules
-dsh plugin --profile <name> add file:/path/to/dsh-browser-anti-cloudflare
-
-# Or symlink (changes to src/ take effect on next boot without reinstall)
-dsh plugin --profile <name> add link:/path/to/dsh-browser-anti-cloudflare
-```
-
-Before installing via `file:` or `link:`, run `pnpm install` in the repository so that peer dependencies (`@deepseek-ai/*`) are present. Profile symlinks do not bootstrap deps of the linked package.
-
-### Verify
-
-Without booting the host, confirm the bundle mounted correctly:
-
-```bash
-dsh --profile <name> --dump-config | grep browser-anti-cloudflare
-```
-
-A healthy mount line appears with no `skipping profile bundle` entry. After a profile restart, the boot log prints the provider registration.
-
-### Remove
-
-```bash
-dsh plugin --profile <name> remove @mulqi/dsh-browser-anti-cloudflare
-```
-
-### Host version pin
-
-This plugin pins `engines.dsh` to `0.2.1-rc.2` exactly. On a newer or older Harness the bundle is refused at boot ("skipping profile bundle"). To stay on a different host version while accepting the risk:
-
-```bash
-dsh plugin --profile <name> allow-version \
-  @mulqi/dsh-browser-anti-cloudflare@0.1.0 \
-  --dsh-version <exact-host-version> \
-  --accept-risk
-```
-
-## Configuration
-
-The plugin reads its config from the profile's `cordis.patch.yml`. Add the following row under `- insert:`:
-
-```yaml
-- insert:
-    - id: browser-anti-cloudflare
-      name: '@mulqi/dsh-browser-anti-cloudflare'
-      config:
-        headless: true
-        operationTimeoutMs: 45000
-```
-
-Then reload the profile:
-
-```bash
-dsh plugin --profile <name> reload
-```
-
-### Options
-
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `headless` | boolean | `true` | Run Chromium without a visible window. Set to `false` to see the browser during development. |
-| `operationTimeoutMs` | number | `45000` | Per-operation timeout (navigate, click, type, eval). |
-| `executablePath` | string | — | Absolute path to a custom Chrome / Chromium binary. Useful when the system Chromium is too old. |
-| `session.enabled` | boolean | `false` | Enable persistent browser sessions across tool calls. Preserves cookies and localStorage. |
-| `session.timeoutMs` | number | `120000` | Session idle timeout before cleanup. |
-| `session.maxPages` | number | `5` | Max concurrent pages per session. |
-| `session.sessionDir` | string | `~/.cache/browser-anti-cloudflare/sessions` | Directory for saved session JSON files. |
-
-### Session Persistence
-
-When `session.enabled: true`, the plugin maintains a single Chromium instance across
-`ac_browser_navigate` calls. Cookies, localStorage, and login state persist between
-calls, enabling multi-step workflows:
-
-```yaml
-# In your profile's cordis.patch.yml
-- insert:
-    - id: browser-anti-cloudflare
-      name: '@mulqi/dsh-browser-anti-cloudflare'
-      config:
-        headless: true
-        session:
-          enabled: true
-          timeoutMs: 120000
-```
-
-New tools available when sessions are enabled:
-- `ac_browser_session_save` — persist current state to disk
-- `ac_browser_session_load` — restore from a saved session file
-- `ac_browser_session_status` — check active session info
-
-**Note:** Session persistence shares one Chromium process. Different URLs in the same
-session share the same cookie jar. For domain isolation, use separate profiles.
-
-### Headed Mode (Development Debugging)
-
-Set `headless: false` to run Chromium with a visible window — useful for debugging
-anti-detect scripts and WAF bypass behavior in real-time. A floating debug panel
-appears showing live fingerprint metrics:
-
-```yaml
-# In your profile's cordis.patch.yml
-- insert:
-    - id: browser-anti-cloudflare
-      name: '@mulqi/dsh-browser-anti-cloudflare'
-      config:
-        headless: false   # ← visible window for debugging
-```
-
-The overlay displays: `webdriver`, `plugins`, `chrome.runtime`, `SharedArrayBuffer`,
-`languages`, and `platform` — each with a ✓/✗ indicator. Zero overhead when
-`headless: true` (the overlay script is never loaded).
-
-## Compatibility
-
-- **DSH:** `0.2.1-rc.2` (exact pin via `engines.dsh`)
-- **Playwright:** `^1.65.1`
-- **Browser:** Chromium only — Firefox and WebKit are not supported because stealth patches target Chromium CDP events.
-- **WAFs Supported:** Cloudflare, Akamai, Imperva (Incapsula), Fastly
-
-## Exclusive slot warning
-
-This plugin claims the single `browserUse` provider slot in a DSH profile. It **cannot coexist** with any of these providers:
-
-- `@deepseek-ai/dsh-experimental-browser-use-stagehand-native`
-- `@deepseek-ai/dsh-experimental-browser-use-playwright-mcp`
-- `@deepseek-ai/dsh-experimental-browser-use-chrome-devtools-mcp`
-
-If another provider is already registered, the profile fails to boot with:
-
-```
-[browser-anti-cloudflare] browserUse slot is already taken by: <provider-name>.
-Disable or remove the competing provider(s) in your profile's cordis.patch.yml —
-only one browser-use provider may be active per DSH profile.
-```
-
-Disable or remove the competing provider before installing this one.
-
-## Anti-detection techniques
-
-1. `navigator.webdriver` → redefined as `undefined`
-2. `navigator.plugins` → returns a realistic array
-3. `navigator.languages` → `['en-US', 'en']`
-4. `navigator.hardwareConcurrency` → randomised between 4–7
-5. WebGL renderer / UNMASK strings → neutralised to hide the GPU vendor
-6. `chrome.runtime` shim injected for extension APIs
-7. `SharedArrayBuffer` → set to `undefined`
-8. Permission queries for `notifications` → always denied
-9. Custom user-agent string (Chrome 131 on Windows)
-10. `--disable-blink-features=AutomationControlled` launch flag
-
-## Troubleshooting
-
-| Symptom | Likely cause / fix |
+| Tool | Purpose |
 |---|---|
-| Profile refuses to boot after install | Another `browserUse` provider is mounted. Check `--dump-config` and remove the conflicting row. |
-| `skipping profile bundle` in dump-config | Running Harness version doesn't match the pinned `0.2.1-rc.2`. Grant an exemption with `allow-version`, or switch to rc.2. |
-| `ERR_MODULE_NOT_FOUND` for `@deepseek-ai/*` peers | Missing dependency install. Run `pnpm install` in the repo, or use `file:` install from a built checkout. |
-| Cloudflare challenge still appears | The page may use a challenge beyond simple webdriver detection. Check that `headless: true` is set and that no other browser provider is active. |
-| Screenshot returns empty base64 | Navigation timed out. Increase `operationTimeoutMs` or check network/firewall. |
+| `ac_browser_navigate` | Navigate to an authorized public HTTP(S) page and report passive WAF signals. |
+| `ac_browser_screenshot` | Capture PNG screenshot. |
+| `ac_browser_click` | Click a CSS selector. |
+| `ac_browser_type` | Fill a CSS selector. |
+| `ac_browser_eval` | Explicitly opt-in trusted page JavaScript. |
+| `ac_browser_session_save` | Save encrypted storage state. |
+| `ac_browser_session_load` | Restore encrypted storage state. |
+| `ac_browser_session_status` | Report session status. |
 
-## License
+## WAF detection
+WAF detection is passive and informational. It inspects response headers and page content for known provider signals. It does not modify browser identity, forge challenge tokens, or alter access-control flows. A classification is best-effort, not proof that access is permitted.
 
-MIT
+## Development
+Run `pnpm install`, `pnpm run typecheck`, `pnpm run build`, `pnpm run test`, and `pnpm run test:integration`.
+Local tests that bind loopback explicitly pass `allowPrivateNetworks: true`. Never enable this for untrusted or production inputs.
+
+## Limitations
+- Browser URL checks reduce SSRF risk but do not replace DNS pinning, container isolation, or restrictive outbound firewall rules.
+- WebRTC, extensions, and platform networking may need additional egress restrictions in high-assurance deployments.
+- Account-specific session export/import is not enabled.
