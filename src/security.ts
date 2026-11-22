@@ -1,6 +1,8 @@
 import { lookup } from 'node:dns/promises'
 import { isIP } from 'node:net'
 
+const dnsPins = new Map<string, string[]>()
+
 function blockedIPv4(ip: string): boolean {
   const n = ip.split('.').reduce((v, p) => (v * 256 + Number(p)) >>> 0, 0)
   const ranges: Array<[number, number]> = [
@@ -25,7 +27,33 @@ function blockedAddress(address: string): boolean {
       ip.startsWith('fea') || ip.startsWith('feb') || ip.startsWith('ff') ||
       ip.startsWith('::ffff:') || ip.startsWith('64:ff9b:')
   }
-  return false
+  return true
+}
+
+/**
+ * Resolve a hostname once for this process and reject any later DNS answer drift.
+ * The deployment DNS cache in deploy/egress adds a minimum TTL; the firewall is
+ * the final control that prevents private/reserved destinations at socket level.
+ */
+export async function resolvePinnedPublicAddresses(hostname: string): Promise<string[]> {
+  const normalized = hostname.toLowerCase().replace(/\.$/, '')
+  if (isIP(normalized)) {
+    if (blockedAddress(normalized)) throw new Error('Private or reserved IP addresses are blocked')
+    return [normalized]
+  }
+  let records: Array<{ address: string; family: number }>
+  try { records = await lookup(normalized, { all: true, verbatim: true }) }
+  catch { throw new Error('Hostname DNS resolution failed; request blocked') }
+  const addresses = [...new Set(records.map(record => record.address))].sort()
+  if (!addresses.length || addresses.some(blockedAddress)) {
+    throw new Error('Hostname resolves to a private or reserved address; request blocked')
+  }
+  const pinned = dnsPins.get(normalized)
+  if (pinned && (pinned.length !== addresses.length || pinned.some((address, index) => address !== addresses[index]))) {
+    throw new Error('DNS answer changed during this process lifetime; request blocked')
+  }
+  if (!pinned) dnsPins.set(normalized, addresses)
+  return [...(pinned ?? addresses)]
 }
 
 /** Fail-closed SSRF guard for browser navigation and subresource requests. */
@@ -39,17 +67,7 @@ export async function assertSafeUrl(input: string, allowPrivateNetworks = false)
       hostname.endsWith('.local') || hostname.endsWith('.internal')))) {
     throw new Error('Local and internal hostnames are blocked')
   }
-  if (isIP(hostname)) {
-    if (!allowPrivateNetworks && blockedAddress(hostname)) throw new Error('Private or reserved IP addresses are blocked')
-    return url
-  }
-  if (allowPrivateNetworks) return url
-  let records: Array<{ address: string; family: number }>
-  try { records = await lookup(hostname, { all: true, verbatim: true }) }
-  catch { throw new Error('Hostname DNS resolution failed; request blocked') }
-  if (!records.length || records.some(record => blockedAddress(record.address))) {
-    throw new Error('Hostname resolves to a private or reserved address; request blocked')
-  }
+  if (!allowPrivateNetworks) await resolvePinnedPublicAddresses(hostname)
   return url
 }
 
@@ -59,6 +77,6 @@ export function validateSelector(selector: string): string {
 }
 
 export function validateTextInput(value: string, maxLength = 10000): string {
-  if (value.length > maxLength) throw new Error(`Input exceeds ${maxLength} characters`)
+  if (value.length > maxLength) throw new Error(\`Input exceeds \${maxLength} characters\`)
   return value
 }
