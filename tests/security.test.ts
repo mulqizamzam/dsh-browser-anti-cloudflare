@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { assertSafeUrl, validateSelector, validateTextInput } from '../src/security.js'
+import { assertSafeUrl, resolvePinnedPublicAddresses, validateSelector, validateTextInput } from '../src/security.js'
 
 describe('browser input security', () => {
   it('accepts public HTTP(S) URL', async () => {
@@ -10,6 +10,9 @@ describe('browser input security', () => {
   })
   it('rejects URL credentials', async () => {
     await expect(assertSafeUrl('https://user:pass@example.com')).rejects.toThrow(/credentials/)
+  })
+  it('returns a stable pinned address for public IP literals', async () => {
+    await expect(resolvePinnedPublicAddresses('1.1.1.1')).resolves.toEqual(['1.1.1.1'])
   })
   it('validates selectors and text lengths', () => {
     expect(() => validateSelector('  ')).toThrow()
