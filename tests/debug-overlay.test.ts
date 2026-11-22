@@ -75,7 +75,7 @@ describe('debug-overlay: integration', () => {
   it('overlay script does not break existing stealth patches', async () => {
     const page = await browser!.newPage()
     try {
-      await navigateWithStealth(page, `http://127.0.0.1:${PORT}/`, 10000, { debug: true })
+      await navigateWithStealth(page, `http://127.0.0.1:${PORT}/`, 10000, { debug: true, allowPrivateNetworks: true })
       expect(await page.locator('h1').textContent()).toBe('Debug Test')
     } finally {
       await page.close()
