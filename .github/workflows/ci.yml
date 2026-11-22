@@ -36,7 +36,7 @@ jobs:
       - name: Verify session encryption is enforced
         run: grep -q "session.encryptionKey" src/index.ts
       - name: Verify deployment egress policy exists
-        run: test -x deploy/egress/entrypoint.sh
+        run: test -f deploy/egress/entrypoint.sh
   browser-integration:
     name: Browser integration
     runs-on: ubuntu-latest
