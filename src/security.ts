@@ -77,6 +77,6 @@ export function validateSelector(selector: string): string {
 }
 
 export function validateTextInput(value: string, maxLength = 10000): string {
-  if (value.length > maxLength) throw new Error(\`Input exceeds ${maxLength} characters\`)
+  if (value.length > maxLength) throw new Error(`Input exceeds ${maxLength} characters`)
   return value
 }
