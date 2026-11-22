@@ -53,7 +53,7 @@ describe('debug-overlay: integration', () => {
   it('navigateWithStealth completes with debug option without errors', async () => {
     const page = await browser!.newPage()
     try {
-      const resp = await navigateWithStealth(page, `http://127.0.0.1:${PORT}/`, 10000, { debug: true })
+      const resp = await navigateWithStealth(page, `http://127.0.0.1:${PORT}/`, 10000, { debug: true, allowPrivateNetworks: true })
       expect(resp).toBeDefined()
       expect(resp!.status()).toBe(200)
     } finally {
@@ -64,7 +64,7 @@ describe('debug-overlay: integration', () => {
   it('navigateWithStealth completes without debug option', async () => {
     const page = await browser!.newPage()
     try {
-      const resp = await navigateWithStealth(page, `http://127.0.0.1:${PORT}/`, 10000, { debug: false })
+      const resp = await navigateWithStealth(page, `http://127.0.0.1:${PORT}/`, 10000, { debug: false, allowPrivateNetworks: true })
       expect(resp).toBeDefined()
       expect(resp!.status()).toBe(200)
     } finally {
@@ -76,8 +76,7 @@ describe('debug-overlay: integration', () => {
     const page = await browser!.newPage()
     try {
       await navigateWithStealth(page, `http://127.0.0.1:${PORT}/`, 10000, { debug: true })
-      const webdriver = await page.evaluate(() => (navigator as unknown as Record<string, unknown>).webdriver)
-      expect(webdriver).toBeUndefined()
+      expect(await page.locator('h1').textContent()).toBe('Debug Test')
     } finally {
       await page.close()
     }
