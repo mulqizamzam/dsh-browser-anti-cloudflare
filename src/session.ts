@@ -96,15 +96,16 @@ export class SessionManager {
   }
 
   async getPage(url?: string): Promise<Page> {
-    this.touch()
     if (this.accountMgr && this.accountMgr.getCurrentId()) {
       const page = await this.accountMgr.getAccountPage(this.accountMgr.getCurrentId()!)
       if (url) await assertSafeUrl(url, this.config.allowPrivateNetworks)
+      this.touch()
       return page
     }
     let page = this.pages.get('default')
     if (!page || page.isClosed()) { page = await (await this.ensureContext()).newPage(); this.pages.set('default', page) }
     if (url) await assertSafeUrl(url, this.config.allowPrivateNetworks)
+    this.touch()
     return page
   }
 
@@ -112,13 +113,16 @@ export class SessionManager {
 
   async navigate(url: string, timeoutMs: number): Promise<import('playwright').Response | null> {
     const page = await this.getPage()
-    return navigateWithStealth(page, url, timeoutMs, { allowPrivateNetworks: this.config.allowPrivateNetworks })
+    const response = await navigateWithStealth(page, url, timeoutMs, { allowPrivateNetworks: this.config.allowPrivateNetworks })
+    this.touch()
+    return response
   }
 
   async screenshot(url: string, timeoutMs: number, fullPage = false): Promise<{ data: string; mimeType: string; width: number; height: number }> {
     const page = await this.getPage()
     await navigateWithStealth(page, url, timeoutMs, { allowPrivateNetworks: this.config.allowPrivateNetworks })
     const data = await page.screenshot({ fullPage, type: 'png' })
+    this.touch()
     return { data: data.toString('base64'), mimeType: 'image/png', width: page.viewportSize()?.width ?? 1280, height: page.viewportSize()?.height ?? 800 }
   }
 
@@ -126,6 +130,7 @@ export class SessionManager {
     const page = await this.getPage()
     await navigateWithStealth(page, url, timeoutMs, { allowPrivateNetworks: this.config.allowPrivateNetworks })
     await page.locator(selector).click({ timeout: timeoutMs })
+    this.touch()
     return page.url()
   }
 
@@ -133,6 +138,7 @@ export class SessionManager {
     const page = await this.getPage()
     await navigateWithStealth(page, url, timeoutMs, { allowPrivateNetworks: this.config.allowPrivateNetworks })
     await page.locator(selector).fill(value, { timeout: timeoutMs })
+    this.touch()
     return page.url()
   }
 
@@ -140,7 +146,9 @@ export class SessionManager {
     if (!this.config.allowUnsafeEval) throw new Error('Browser eval is disabled. Set allowUnsafeEval=true only for trusted local workflows.')
     const page = await this.getPage()
     await navigateWithStealth(page, url, timeoutMs, { allowPrivateNetworks: this.config.allowPrivateNetworks })
-    return page.evaluate(expression)
+    const result = await page.evaluate(expression)
+    this.touch()
+    return result
   }
 
   private assertPersistenceEnabled(): string {
@@ -216,9 +224,10 @@ export class SessionManager {
   }
 
   async getAccountPage(id: string, url?: string): Promise<Page> {
-    this.touch()
     if (!this.accountMgr) throw new Error('No accounts configured')
-    return this.accountMgr.getAccountPage(id, url)
+    const page = await this.accountMgr.getAccountPage(id, url)
+    this.touch()
+    return page
   }
 
   switchAccount(id: string): void {
