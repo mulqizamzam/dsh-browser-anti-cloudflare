@@ -2,13 +2,14 @@ import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'node:
 import { mkdir, readFile, writeFile, realpath, lstat, chmod } from 'node:fs/promises'
 import { join, resolve, sep } from 'node:path'
 import { chromium } from 'playwright'
-import type { Browser, BrowserContext, Page } from 'playwright'
+import type { Browser, BrowserContext, Page, StorageState } from 'playwright'
 import type { Config } from './index.js'
 import { navigateWithStealth } from './stealth.js'
 import { createProxyManager } from './proxy.js'
 import type { ProxyManager } from './proxy.js'
 import { AccountManager } from './accounts.js'
 import { assertSafeUrl } from './security.js'
+import { enforcePageLimit } from './lifecycle.js'
 
 const MAGIC = 'BAS1'
 function encrypt(payload: string, secret: string): string {
@@ -24,6 +25,7 @@ function decrypt(payload: string, secret: string): string {
   decipher.setAuthTag(Buffer.from(tag, 'base64'))
   return Buffer.concat([decipher.update(Buffer.from(data, 'base64')), decipher.final()]).toString('utf8')
 }
+
 export class SessionManager {
   private browser: Browser | null = null
   private context: BrowserContext | null = null
@@ -33,8 +35,18 @@ export class SessionManager {
   private activeProxy: { server: string; username?: string; password?: string } | undefined
   private readonly sessionId = randomBytes(12).toString('hex')
   private readonly sessionDir: string
+  private readonly idleTimeoutMs: number
+  private readonly maxPages: number
+  private lastActivityAt = Date.now()
+  private idleTimer: ReturnType<typeof setTimeout> | undefined
+  private closed = false
+
   constructor(private readonly config: Config) {
     this.sessionDir = resolve(config.session?.sessionDir ?? join(process.env.HOME || '/tmp', '.cache', 'browser-anti-cloudflare', 'sessions'))
+    this.idleTimeoutMs = config.session?.timeoutMs ?? 0
+    this.maxPages = config.session?.maxPages ?? 5
+    if (this.idleTimeoutMs < 0) throw new Error('session.timeoutMs must be zero or greater')
+    if (!Number.isInteger(this.maxPages) || this.maxPages < 1) throw new Error('session.maxPages must be a positive integer')
     this.proxyMgr = createProxyManager(config.proxy)
     if (config.accounts?.length) {
       this.accountMgr = new AccountManager(config)
@@ -42,14 +54,47 @@ export class SessionManager {
       this.accountMgr.setCurrent(config.accounts[0].id)
     }
   }
+
+  private touch(): void {
+    if (this.closed) return
+    this.lastActivityAt = Date.now()
+    if (this.idleTimeoutMs <= 0) return
+    if (this.idleTimer) clearTimeout(this.idleTimer)
+    this.idleTimer = setTimeout(() => { void this.expireIfIdle() }, this.idleTimeoutMs)
+    this.idleTimer.unref?.()
+  }
+
+  private async expireIfIdle(): Promise<void> {
+    if (this.closed || this.idleTimeoutMs <= 0) return
+    const remaining = this.idleTimeoutMs - (Date.now() - this.lastActivityAt)
+    if (remaining > 0) {
+      this.idleTimer = setTimeout(() => { void this.expireIfIdle() }, remaining)
+      this.idleTimer.unref?.()
+      return
+    }
+    await this.closeRuntime()
+  }
+
+  private async closeRuntime(): Promise<void> {
+    for (const page of this.pages.values()) await page.close().catch(() => {})
+    this.pages.clear()
+    await this.accountMgr?.closeContexts().catch(() => {})
+    await this.context?.close().catch(() => {})
+    await this.browser?.close().catch(() => {})
+    this.context = null; this.browser = null
+  }
+
   private async ensureContext(): Promise<BrowserContext> {
     if (this.context) return this.context
     this.browser = await chromium.launch({ headless: this.config.headless ?? true, executablePath: this.config.executablePath ?? undefined, args: ['--disable-dev-shm-usage', '--disable-gpu'] })
     this.activeProxy = this.proxyMgr?.getPlaywrightProxy()
     this.context = await this.browser.newContext({ serviceWorkers: 'block', ...(this.activeProxy ? { proxy: this.activeProxy } : {}) })
+    enforcePageLimit(this.context, this.maxPages)
     return this.context
   }
+
   async getPage(url?: string): Promise<Page> {
+    this.touch()
     if (this.accountMgr && this.accountMgr.getCurrentId()) {
       const page = await this.accountMgr.getAccountPage(this.accountMgr.getCurrentId()!)
       if (url) await assertSafeUrl(url, this.config.allowPrivateNetworks)
@@ -60,55 +105,50 @@ export class SessionManager {
     if (url) await assertSafeUrl(url, this.config.allowPrivateNetworks)
     return page
   }
+
   async getOrCreatePage(url?: string): Promise<Page> { return this.getPage(url) }
+
   async navigate(url: string, timeoutMs: number): Promise<import('playwright').Response | null> {
     const page = await this.getPage()
     return navigateWithStealth(page, url, timeoutMs, { allowPrivateNetworks: this.config.allowPrivateNetworks })
   }
+
   async screenshot(url: string, timeoutMs: number, fullPage = false): Promise<{ data: string; mimeType: string; width: number; height: number }> {
     const page = await this.getPage()
     await navigateWithStealth(page, url, timeoutMs, { allowPrivateNetworks: this.config.allowPrivateNetworks })
     const data = await page.screenshot({ fullPage, type: 'png' })
     return { data: data.toString('base64'), mimeType: 'image/png', width: page.viewportSize()?.width ?? 1280, height: page.viewportSize()?.height ?? 800 }
   }
+
   async click(url: string, selector: string, timeoutMs: number): Promise<string> {
     const page = await this.getPage()
     await navigateWithStealth(page, url, timeoutMs, { allowPrivateNetworks: this.config.allowPrivateNetworks })
     await page.locator(selector).click({ timeout: timeoutMs })
     return page.url()
   }
+
   async type(url: string, selector: string, value: string, timeoutMs: number): Promise<string> {
     const page = await this.getPage()
     await navigateWithStealth(page, url, timeoutMs, { allowPrivateNetworks: this.config.allowPrivateNetworks })
     await page.locator(selector).fill(value, { timeout: timeoutMs })
     return page.url()
   }
+
   async evaluate(url: string, expression: string, timeoutMs: number): Promise<unknown> {
     if (!this.config.allowUnsafeEval) throw new Error('Browser eval is disabled. Set allowUnsafeEval=true only for trusted local workflows.')
     const page = await this.getPage()
     await navigateWithStealth(page, url, timeoutMs, { allowPrivateNetworks: this.config.allowPrivateNetworks })
     return page.evaluate(expression)
   }
-  async saveSession(label = 'default'): Promise<{ path: string; size: number }> {
+
+  private assertPersistenceEnabled(): string {
     if (!this.config.session?.enabled) throw new Error('Session persistence is disabled')
     const secret = this.config.session.encryptionKey
     if (!secret || secret.length < 32) throw new Error('Session persistence requires session.encryptionKey with at least 32 characters')
-    if (!/^[a-zA-Z0-9_-]{1,48}$/.test(label)) throw new Error('Session label must contain 1–48 letters, numbers, _ or -')
-    if (this.accountMgr) throw new Error('Encrypted session save/load is currently supported only for the default isolated browser context; account-specific persistence is intentionally disabled')
-    const context = await this.ensureContext()
-    const state = await context.storageState()
-    await mkdir(this.sessionDir, { recursive: true, mode: 0o700 })
-    await chmod(this.sessionDir, 0o700)
-    const path = join(this.sessionDir, `${label}-${this.sessionId}.session`)
-    const content = encrypt(JSON.stringify({ version: 1, createdAt: Date.now(), state }), secret)
-    await writeFile(path, content, { encoding: 'utf8', mode: 0o600 })
-    return { path, size: Buffer.byteLength(content) }
+    return secret
   }
-  async loadSession(path: string): Promise<boolean> {
-    if (!this.config.session?.enabled) throw new Error('Session persistence is disabled')
-    const secret = this.config.session.encryptionKey
-    if (!secret || secret.length < 32) throw new Error('Session persistence requires session.encryptionKey with at least 32 characters')
-    if (this.accountMgr) throw new Error('Encrypted session save/load is currently supported only for the default isolated browser context; account-specific persistence is intentionally disabled')
+
+  private async resolveSessionFile(path: string): Promise<string> {
     const requested = resolve(path)
     const root = await realpath(this.sessionDir).catch(async () => { await mkdir(this.sessionDir, { recursive: true, mode: 0o700 }); return realpath(this.sessionDir) })
     const requestedInfo = await lstat(requested)
@@ -117,33 +157,103 @@ export class SessionManager {
     if (actual !== root && !actual.startsWith(root + sep)) throw new Error('Session path must remain inside the configured session directory')
     const info = await lstat(actual)
     if (!info.isFile() || info.isSymbolicLink()) throw new Error('Session path must be a regular file')
-    const decoded = JSON.parse(decrypt(await readFile(actual, 'utf8'), secret))
-    if (decoded.version !== 1 || !decoded.state || !Array.isArray(decoded.state.cookies)) throw new Error('Invalid session payload')
+    return actual
+  }
+
+  async saveSession(label = 'default'): Promise<{ path: string; size: number }> {
+    this.touch()
+    const secret = this.assertPersistenceEnabled()
+    if (!/^[a-zA-Z0-9_-]{1,48}$/.test(label)) throw new Error('Session label must contain 1–48 letters, numbers, _ or -')
+    const accountId = this.accountMgr?.getCurrentId() ?? null
+    const context = accountId ? await this.accountMgr!.getAccountContext(accountId) : await this.ensureContext()
+    const state = await context.storageState()
+    await mkdir(this.sessionDir, { recursive: true, mode: 0o700 })
+    await chmod(this.sessionDir, 0o700)
+    const prefix = accountId ? \`\${accountId}-\` : ''
+    const path = join(this.sessionDir, \`\${prefix}\${label}-\${this.sessionId}.session\`)
+    const content = encrypt(JSON.stringify({ version: 2, createdAt: Date.now(), accountId, state }), secret)
+    await writeFile(path, content, { encoding: 'utf8', mode: 0o600 })
+    return { path, size: Buffer.byteLength(content) }
+  }
+
+  async loadSession(path: string): Promise<boolean> {
+    this.touch()
+    const secret = this.assertPersistenceEnabled()
+    const actual = await this.resolveSessionFile(path)
+    const decoded = JSON.parse(decrypt(await readFile(actual, 'utf8'), secret)) as { version: number; accountId?: string | null; state?: StorageState }
+    if (![1, 2].includes(decoded.version) || !decoded.state || !Array.isArray(decoded.state.cookies)) throw new Error('Invalid session payload')
+    if (decoded.version === 1) {
+      if (this.accountMgr) throw new Error('Legacy session files cannot be restored into an account context')
+      await this.context?.close().catch(() => {})
+      if (!this.activeProxy) this.activeProxy = this.proxyMgr?.getPlaywrightProxy()
+      this.context = await (await this.ensureBrowser()).newContext({ storageState: decoded.state, serviceWorkers: 'block', ...(this.activeProxy ? { proxy: this.activeProxy } : {}) })
+      enforcePageLimit(this.context, this.maxPages)
+      for (const page of this.pages.values()) await page.close().catch(() => {})
+      this.pages.clear()
+      return true
+    }
+    if (decoded.accountId) {
+      const current = this.accountMgr?.getCurrentId()
+      if (!current || current !== decoded.accountId) throw new Error('Encrypted session belongs to a different account')
+      await this.accountMgr!.restoreAccountStorageState(current, decoded.state)
+      return true
+    }
+    if (this.accountMgr) throw new Error('A default-context session cannot be restored while account isolation is enabled')
     await this.context?.close().catch(() => {})
     if (!this.activeProxy) this.activeProxy = this.proxyMgr?.getPlaywrightProxy()
     this.context = await (await this.ensureBrowser()).newContext({ storageState: decoded.state, serviceWorkers: 'block', ...(this.activeProxy ? { proxy: this.activeProxy } : {}) })
+    enforcePageLimit(this.context, this.maxPages)
     for (const page of this.pages.values()) await page.close().catch(() => {})
     this.pages.clear()
     return true
   }
+
   private async ensureBrowser(): Promise<Browser> {
     if (!this.browser) this.browser = await chromium.launch({ headless: this.config.headless ?? true, executablePath: this.config.executablePath ?? undefined, args: ['--disable-dev-shm-usage', '--disable-gpu'] })
     return this.browser
   }
-  async getAccountPage(id: string, url?: string): Promise<Page> { if (!this.accountMgr) throw new Error('No accounts configured'); return this.accountMgr.getAccountPage(id, url) }
-  switchAccount(id: string): void { if (!this.accountMgr) throw new Error('No accounts configured'); this.accountMgr.setCurrent(id) }
+
+  async getAccountPage(id: string, url?: string): Promise<Page> {
+    this.touch()
+    if (!this.accountMgr) throw new Error('No accounts configured')
+    return this.accountMgr.getAccountPage(id, url)
+  }
+
+  switchAccount(id: string): void {
+    this.touch()
+    if (!this.accountMgr) throw new Error('No accounts configured')
+    this.accountMgr.setCurrent(id)
+  }
+
   listAccounts(): string[] { return this.accountMgr?.listAccounts() ?? [] }
   getCurrentAccount(): string | null { return this.accountMgr?.getCurrentId() ?? null }
   hasAccounts(): boolean { return !!this.accountMgr?.count }
-  async getWaf(): Promise<string> { const page = await this.getPage(); return await page.evaluate(() => (window as Window & { __browserWaf?: string }).__browserWaf ?? 'unknown').catch(() => 'unknown') }
-  getInfo() { return { enabled: this.config.session?.enabled ?? false, sessionId: this.sessionId, pageCount: this.accountMgr ? 0 : [...this.pages.values()].filter(p => !p.isClosed()).length, maxPages: this.config.session?.maxPages ?? 5, currentAccount: this.getCurrentAccount() } }
+
+  async getWaf(): Promise<string> {
+    const page = await this.getPage()
+    return await page.evaluate(() => (window as Window & { __browserWaf?: string }).__browserWaf ?? 'unknown').catch(() => 'unknown')
+  }
+
+  getInfo() {
+    const pageCount = this.accountMgr ? this.accountMgr.getPageCount() : [...this.pages.values()].filter(p => !p.isClosed()).length
+    return {
+      enabled: this.config.session?.enabled ?? false,
+      sessionId: this.sessionId,
+      pageCount,
+      maxPages: this.maxPages,
+      timeoutMs: this.idleTimeoutMs,
+      idleForMs: Date.now() - this.lastActivityAt,
+      runtimeActive: !!this.context || !!this.browser || !!this.accountMgr?.getPageCount(),
+      currentAccount: this.getCurrentAccount(),
+    }
+  }
+
   getAccounts(): AccountManager | null { return this.accountMgr }
+
   async close(): Promise<void> {
-    for (const page of this.pages.values()) await page.close().catch(() => {})
-    this.pages.clear()
-    await this.accountMgr?.closeAll().catch(() => {})
-    await this.context?.close().catch(() => {})
-    await this.browser?.close().catch(() => {})
-    this.context = null; this.browser = null; this.accountMgr = null
+    this.closed = true
+    if (this.idleTimer) clearTimeout(this.idleTimer)
+    await this.closeRuntime()
+    this.accountMgr = null
   }
 }
