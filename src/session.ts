@@ -169,8 +169,8 @@ export class SessionManager {
     const state = await context.storageState()
     await mkdir(this.sessionDir, { recursive: true, mode: 0o700 })
     await chmod(this.sessionDir, 0o700)
-    const prefix = accountId ? \`${accountId}-\` : ''
-    const path = join(this.sessionDir, \`${prefix}${label}-${this.sessionId}.session\`)
+    const prefix = accountId ? `${accountId}-` : ''
+    const path = join(this.sessionDir, `${prefix}${label}-${this.sessionId}.session`)
     const content = encrypt(JSON.stringify({ version: 2, createdAt: Date.now(), accountId, state }), secret)
     await writeFile(path, content, { encoding: 'utf8', mode: 0o600 })
     return { path, size: Buffer.byteLength(content) }
