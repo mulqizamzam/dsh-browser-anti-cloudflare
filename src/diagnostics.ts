@@ -39,8 +39,12 @@ export class DiagnosticRecorder {
   ): void {
     if (!this.enabled) return
     const safeAttributes: Record<string, DiagnosticValue> = {}
+    const allowedKeys = new Set([
+      'operation', 'errorType', 'classification', 'status',
+      'proxyConfigured', 'maxPages', 'accountBound', 'accountSwitched', 'bytes',
+    ])
     for (const [key, value] of Object.entries(attributes)) {
-      if (!/^[a-zA-Z][a-zA-Z0-9_]{0,47}$/.test(key)) continue
+      if (!allowedKeys.has(key)) continue
       if (value === null || ['string', 'number', 'boolean'].includes(typeof value)) {
         safeAttributes[key] = typeof value === 'string' ? value.slice(0, 120) : value
       }
