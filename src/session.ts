@@ -1,6 +1,6 @@
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'node:crypto'
 import { mkdir, readFile, writeFile, realpath, lstat } from 'node:fs/promises'
-import { join, resolve, sep }
+import { join, resolve, sep } from 'node:path'
 import { chromium } from 'playwright'
 import type { Browser, BrowserContext, Page, StorageState } from 'playwright'
 import type { Config } from './index.js'
@@ -60,7 +60,7 @@ export class SessionManager {
   }
   async navigate(url: string, timeoutMs: number): Promise<import('playwright').Response | null> {
     const page = await this.getPage()
-    return navigateWithStealth(page, url, timeoutMs)
+    return navigateWithStealth(page, url, timeoutMs, { allowPrivateNetworks: this.config.allowPrivateNetworks })
   }
   async screenshot(url: string, timeoutMs: number, fullPage = false): Promise<{ data: string; mimeType: string; width: number; height: number }> {
     const page = await this.getPage()
@@ -70,20 +70,20 @@ export class SessionManager {
   }
   async click(url: string, selector: string, timeoutMs: number): Promise<string> {
     const page = await this.getPage()
-    await navigateWithStealth(page, url, timeoutMs)
+    await navigateWithStealth(page, url, timeoutMs, { allowPrivateNetworks: this.config.allowPrivateNetworks })
     await page.locator(selector).click({ timeout: timeoutMs })
     return page.url()
   }
   async type(url: string, selector: string, value: string, timeoutMs: number): Promise<string> {
     const page = await this.getPage()
-    await navigateWithStealth(page, url, timeoutMs)
+    await navigateWithStealth(page, url, timeoutMs, { allowPrivateNetworks: this.config.allowPrivateNetworks })
     await page.locator(selector).fill(value, { timeout: timeoutMs })
     return page.url()
   }
   async evaluate(url: string, expression: string, timeoutMs: number): Promise<unknown> {
     if (!this.config.allowUnsafeEval) throw new Error('Browser eval is disabled. Set allowUnsafeEval=true only for trusted local workflows.')
     const page = await this.getPage()
-    await navigateWithStealth(page, url, timeoutMs)
+    await navigateWithStealth(page, url, timeoutMs, { allowPrivateNetworks: this.config.allowPrivateNetworks })
     return page.evaluate(expression)
   }
   async saveSession(label = 'default'): Promise<{ path: string; size: number }> {
@@ -127,6 +127,7 @@ export class SessionManager {
   listAccounts(): string[] { return this.accountMgr?.listAccounts() ?? [] }
   getCurrentAccount(): string | null { return this.accountMgr?.getCurrentId() ?? null }
   hasAccounts(): boolean { return !!this.accountMgr?.count }
+  async getWaf(): Promise<string> { const page = await this.getPage(); return await page.evaluate(() => (window as Window & { __browserWaf?: string }).__browserWaf ?? 'unknown').catch(() => 'unknown') }
   getInfo() { return { enabled: this.config.session?.enabled ?? false, sessionId: this.sessionId, pageCount: this.accountMgr ? 0 : [...this.pages.values()].filter(p => !p.isClosed()).length, maxPages: this.config.session?.maxPages ?? 5, currentAccount: this.getCurrentAccount() } }
   getAccounts(): AccountManager | null { return this.accountMgr }
   async close(): Promise<void> {
