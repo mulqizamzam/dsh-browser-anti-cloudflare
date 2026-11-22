@@ -47,7 +47,7 @@ describe('integration: navigateWithStealth', () => {
   it('page contains expected content after navigation', async () => {
     const page = await browser!.newPage()
     try {
-      await navigateWithStealth(page, `http://127.0.0.1:${PORT}/`, 10000)
+      await navigateWithStealth(page, `http://127.0.0.1:${PORT}/`, 10000, { allowPrivateNetworks: true })
       const h1 = await page.locator('h1').textContent()
       expect(h1).toBe('OK')
     } finally {
