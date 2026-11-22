@@ -1,13 +1,5 @@
-# Profile patch for @mulqi/dsh-browser-anti-cloudflare
-#
-# Inserts the anti-cloudflare browser-use provider into a DSH profile.
-# WARNING: This provider claims the exclusive browserUse slot. Any other
-# browser-use provider (stagehand-native, playwright-mcp, chrome-devtools-mcp)
-# MUST be disabled or removed from the same profile or boot will fail with
-# "browser use provider ... is already registered".
-#
-# Install: add this row to your profile's cordis.patch.yml under `- insert:`.
-# Then run: dsh profile reload  (or restart the session)
+# Profile patch for the authorized browser automation provider.
+# This package claims the exclusive browserUse slot.
 
 - insert:
     - id: browser-anti-cloudflare
@@ -15,3 +7,5 @@
       config:
         headless: true
         operationTimeoutMs: 45000
+        allowUnsafeEval: false
+        allowPrivateNetworks: false

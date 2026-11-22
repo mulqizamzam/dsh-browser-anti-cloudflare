@@ -1,95 +1,57 @@
 name: CI
-
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, hardening/secure-session-production-gates]
   pull_request:
-    branches: [main, master]
-
+    branches: [main, master, hardening/secure-session-production-gates]
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
-  build:
-    name: Build & Typecheck
+  quality:
+    name: Build, typecheck, security regression
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
       - uses: pnpm/action-setup@v4
         with:
-          version: 9
-
+          version: 9.15.5
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: pnpm
-
       - run: pnpm install --frozen-lockfile
-
-      - run: pnpm run build
       - run: pnpm run typecheck
-
-  test:
-    name: Tests
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-
-      - run: npx playwright install chromium
-      - run: pnpm run test
-
-  integration:
-    name: Integration (Cloudflare Bypass)
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-
-      - run: npx playwright install chromium
-      - run: pnpm run test:integration
-    timeout-minutes: 5
-
-  publish-check:
-    name: Dry-run npm publish
-    runs-on: ubuntu-latest
-    needs: [build, test]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          registry-url: 'https://registry.npmjs.org'
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
       - run: pnpm run build
-      - run: npm publish --dry-run
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - run: npx playwright install --with-deps chromium
+      - run: pnpm run test
+      - name: Verify no unsafe eval enabled by default
+        run: '! grep -R "allowUnsafeEval: true" src'
+      - name: Verify session encryption is enforced
+        run: grep -q "session.encryptionKey" src/index.ts
+      - name: Verify deployment egress policy exists
+        run: |
+          test -f deploy/egress/entrypoint.sh
+          sh -n deploy/egress/entrypoint.sh
+          sh -n deploy/egress/verify.sh
+          test -f deploy/egress/README.md
+  browser-integration:
+    name: Browser integration
+    runs-on: ubuntu-latest
+    needs: quality
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: pnpm install --frozen-lockfile
+      - run: npx playwright install --with-deps chromium
+      - run: pnpm run test:integration
+        timeout-minutes: 10

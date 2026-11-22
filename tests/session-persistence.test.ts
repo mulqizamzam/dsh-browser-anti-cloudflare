@@ -4,7 +4,8 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { chromium } from 'playwright'
 import type { Browser } from 'playwright'
-import { writeFileSync, readFileSync, unlinkSync, existsSync } from 'fs'
+import { readFileSync, existsSync } from 'fs'
+import { rm } from 'node:fs/promises'
 import { join } from 'path'
 import { SessionManager } from '../src/session.js'
 
@@ -50,7 +51,8 @@ describe('session-persistence: basic', () => {
     browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] })
     sessionMgr = new SessionManager({
       headless: true,
-      session: { enabled: true, sessionDir },
+      allowPrivateNetworks: true,
+      session: { enabled: true, sessionDir, encryptionKey: 'test-session-key-'.repeat(3) },
     })
   })
 
@@ -59,7 +61,7 @@ describe('session-persistence: basic', () => {
     await browser?.close()
     await closeServer?.()
     // Cleanup session dir
-    try { unlinkSync(join(sessionDir, 'default-test.json')) } catch (_) {}
+    await rm(sessionDir, { recursive: true, force: true })
   })
 
   it('preserves cookies across two navigate calls', async () => {
@@ -75,18 +77,16 @@ describe('session-persistence: basic', () => {
     await page.close()
   }, 20000)
 
-  it('session_save writes a valid JSON file', async () => {
+  it('session_save writes authenticated ciphertext', async () => {
     const result = await sessionMgr!.saveSession('test-save')
     expect(existsSync(result.path)).toBe(true)
     expect(typeof result.size).toBe('number')
     expect(result.size).toBeGreaterThan(0)
 
-    // Verify the file is valid JSON
+    // Session content is authenticated ciphertext, not plaintext JSON.
     const content = readFileSync(result.path, 'utf-8')
-    const data = JSON.parse(content)
-    expect(data).toHaveProperty('cookies')
-    expect(data).toHaveProperty('localStorage')
-    expect(data).toHaveProperty('createdAt')
+    expect(content.startsWith('BAS2:')).toBe(true)
+    expect(content).not.toContain('cookies')
   })
 
   it('session_status returns correct info', async () => {
@@ -98,7 +98,7 @@ describe('session-persistence: basic', () => {
   })
 
   it('disabled session falls back to fresh browser', async () => {
-    const freshMgr = new SessionManager({ headless: true })
+    const freshMgr = new SessionManager({ headless: true, allowPrivateNetworks: true })
     const resp = await freshMgr.navigate(`http://127.0.0.1:${PORT}/`, 10000)
     expect(resp).toBeDefined()
     expect(resp!.status()).toBe(200)

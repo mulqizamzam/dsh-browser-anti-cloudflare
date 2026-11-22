@@ -131,64 +131,9 @@ export function generateProfile(seed?: number): FingerprintProfile {
   }
 }
 
-export function buildFingerprintScript(profile: FingerprintProfile): string {
-  return `
-(() => {
-  // --- navigator.webdriver removal -------------------------------------------
-  Object.defineProperty(navigator, 'webdriver', { get: () => undefined })
-
-  // --- plugin length ---------------------------------------------------------
-  Object.defineProperty(navigator, 'plugins', {
-    get: () => Array.from({ length: ${profile.plugins} }, () => ({}))
-  })
-
-  // --- languages ------------------------------------------------------------
-  Object.defineProperty(navigator, 'languages', {
-    get: () => ${JSON.stringify(profile.languages)}
-  })
-
-  // --- platform -------------------------------------------------------------
-  Object.defineProperty(navigator, 'platform', { get: () => '${profile.platformStr}' })
-
-  // --- hardware concurrency -------------------------------------------------
-  Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => ${profile.hardwareConcurrency} })
-
-  // --- device memory --------------------------------------------------------
-  ${profile.deviceMemory ? `Object.defineProperty(navigator, 'deviceMemory', { get: () => ${profile.deviceMemory} })` : ''}
-
-  // --- screen dimensions ----------------------------------------------------
-  Object.defineProperty(window.screen, 'width', { get() { return ${profile.screenWidth} }, configurable: true })
-  Object.defineProperty(window.screen, 'height', { get() { return ${profile.screenHeight} }, configurable: true })
-  Object.defineProperty(window.screen, 'availWidth', { get() { return ${profile.availWidth} }, configurable: true })
-  Object.defineProperty(window.screen, 'availHeight', { get() { return ${profile.availHeight} }, configurable: true })
-
-  // --- sharedArrayBuffer disabled -------------------------------------------
-  Object.defineProperty(globalThis, 'SharedArrayBuffer', { value: undefined })
-
-  // --- chrome runtime shim --------------------------------------------------
-  if (!(window).chrome) {
-    (window).chrome = {
-      runtime: { onMessage: { addListener: () => {}, removeListener: () => {} } },
-    }
-  }
-
-  // --- webgl renderer neutralisation ----------------------------------------
-  const origGP = WebGLRenderingContext.prototype.getParameter
-  WebGLRenderingContext.prototype.getParameter = function(param) {
-    if (param === 37445 || param === 37446) {
-      return '${profile.webglRenderer}'
-    }
-    return origGP.call(this, param)
-  }
-  if (typeof WebGL2RenderingContext !== 'undefined') {
-    const orig2 = WebGL2RenderingContext.prototype.getParameter
-    WebGL2RenderingContext.prototype.getParameter = function(param) {
-      if (param === 37445 || param === 37446) return '${profile.webglRenderer}'
-      return orig2.call(this, param)
-    }
-  }
-})()
-  `
+export function buildFingerprintScript(_profile: FingerprintProfile): string {
+  // Deliberately disabled: never spoof browser identity or hardware signals.
+  return ''
 }
 
 /** Validate that a profile is internally consistent. */
