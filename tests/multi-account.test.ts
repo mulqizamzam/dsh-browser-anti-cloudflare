@@ -14,7 +14,7 @@ describe('account context isolation and lifecycle', () => {
   it('validates account proxy overrides during registration', async () => {
     const manager = new SessionManager({ headless: true })
     try {
-      expect(() => manager.getAccounts()).toBeNull()
+      expect(manager.getAccounts()).toBeNull()
       const accounts = new (await import('../src/accounts.js')).AccountManager()
       expect(() => accounts.register({ id: 'bad-proxy', proxyUrl: 'file:///tmp/proxy' })).toThrow(/Proxy must be/)
       expect(() => accounts.register({ id: 'embedded-auth', proxyUrl: 'http://user:pass@proxy.example:8080' })).toThrow(/credentials/)
