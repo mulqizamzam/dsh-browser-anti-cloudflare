@@ -1,9 +1,9 @@
 name: CI
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, hardening/secure-session-production-gates]
   pull_request:
-    branches: [main, master]
+    branches: [main, master, hardening/secure-session-production-gates]
 permissions:
   contents: read
 jobs:
@@ -14,20 +14,29 @@ jobs:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 9.15.5
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
       - run: pnpm install --no-frozen-lockfile
+      - name: Publish generated pnpm lockfile for review
+        uses: actions/upload-artifact@v4
+        with:
+          name: pnpm-lockfile
+          path: pnpm-lock.yaml
+          if-no-files-found: error
+          retention-days: 7
+      - run: pnpm install --frozen-lockfile
       - run: pnpm run typecheck
       - run: pnpm run build
       - run: npx playwright install --with-deps chromium
       - run: pnpm run test
       - name: Verify no unsafe eval enabled by default
-        run: |
-          ! grep -R "allowUnsafeEval: true" src
+        run: '! grep -R "allowUnsafeEval: true" src'
       - name: Verify session encryption is enforced
         run: grep -q "session.encryptionKey" src/index.ts
+      - name: Verify deployment egress policy exists
+        run: test -x deploy/egress/entrypoint.sh
   browser-integration:
     name: Browser integration
     runs-on: ubuntu-latest
@@ -36,7 +45,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 9.15.5
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
