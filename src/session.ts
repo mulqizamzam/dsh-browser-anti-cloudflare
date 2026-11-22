@@ -1,8 +1,8 @@
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'node:crypto'
-import { mkdir, readFile, writeFile, realpath, lstat } from 'node:fs/promises'
+import { mkdir, readFile, writeFile, realpath, lstat, chmod } from 'node:fs/promises'
 import { join, resolve, sep } from 'node:path'
 import { chromium } from 'playwright'
-import type { Browser, BrowserContext, Page, StorageState } from 'playwright'
+import type { Browser, BrowserContext, Page } from 'playwright'
 import type { Config } from './index.js'
 import { navigateWithStealth } from './stealth.js'
 import { createProxyManager } from './proxy.js'
@@ -95,8 +95,9 @@ export class SessionManager {
     if (!/^[a-zA-Z0-9_-]{1,48}$/.test(label)) throw new Error('Session label must contain 1–48 letters, numbers, _ or -')
     if (this.accountMgr) throw new Error('Encrypted session save/load is currently supported only for the default isolated browser context; account-specific persistence is intentionally disabled')
     const context = await this.ensureContext()
-    const state: StorageState = await context.storageState()
+    const state = await context.storageState()
     await mkdir(this.sessionDir, { recursive: true, mode: 0o700 })
+    await chmod(this.sessionDir, 0o700)
     const path = join(this.sessionDir, `${label}-${this.sessionId}.session`)
     const content = encrypt(JSON.stringify({ version: 1, createdAt: Date.now(), state }), secret)
     await writeFile(path, content, { encoding: 'utf8', mode: 0o600 })
@@ -118,6 +119,7 @@ export class SessionManager {
     const decoded = JSON.parse(decrypt(await readFile(actual, 'utf8'), secret))
     if (decoded.version !== 1 || !decoded.state || !Array.isArray(decoded.state.cookies)) throw new Error('Invalid session payload')
     await this.context?.close().catch(() => {})
+    if (!this.activeProxy) this.activeProxy = this.proxyMgr?.getPlaywrightProxy()
     this.context = await (await this.ensureBrowser()).newContext({ storageState: decoded.state, ...(this.activeProxy ? { proxy: this.activeProxy } : {}) })
     for (const page of this.pages.values()) await page.close().catch(() => {})
     this.pages.clear()
