@@ -25,6 +25,8 @@ jobs:
         with:
           node-version: '22'
       - run: pnpm install --frozen-lockfile
+      - name: Test release audit generator
+        run: python3 -m unittest tests/test_release_audit.py -v
       - run: pnpm run typecheck
       - run: pnpm run build
       - run: npx playwright install --with-deps chromium
