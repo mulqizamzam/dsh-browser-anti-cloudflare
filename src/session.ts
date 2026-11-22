@@ -46,7 +46,7 @@ export class SessionManager {
     if (this.context) return this.context
     this.browser = await chromium.launch({ headless: this.config.headless ?? true, executablePath: this.config.executablePath ?? undefined, args: ['--disable-dev-shm-usage', '--disable-gpu'] })
     this.activeProxy = this.proxyMgr?.getPlaywrightProxy()
-    this.context = await this.browser.newContext({ ...(this.activeProxy ? { proxy: this.activeProxy } : {}) })
+    this.context = await this.browser.newContext({ serviceWorkers: 'block', ...(this.activeProxy ? { proxy: this.activeProxy } : {}) })
     return this.context
   }
   async getPage(url?: string): Promise<Page> {
@@ -120,7 +120,7 @@ export class SessionManager {
     if (decoded.version !== 1 || !decoded.state || !Array.isArray(decoded.state.cookies)) throw new Error('Invalid session payload')
     await this.context?.close().catch(() => {})
     if (!this.activeProxy) this.activeProxy = this.proxyMgr?.getPlaywrightProxy()
-    this.context = await (await this.ensureBrowser()).newContext({ storageState: decoded.state, ...(this.activeProxy ? { proxy: this.activeProxy } : {}) })
+    this.context = await (await this.ensureBrowser()).newContext({ storageState: decoded.state, serviceWorkers: 'block', ...(this.activeProxy ? { proxy: this.activeProxy } : {}) })
     for (const page of this.pages.values()) await page.close().catch(() => {})
     this.pages.clear()
     return true
