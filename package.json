@@ -26,7 +26,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:integration": "vitest run tests/integration.test.ts",
-    "prepare": "npm run build"
+    "prepare": "npm run build",
+    "test:security": "vitest run tests/security.test.ts tests/session-security.test.ts tests/proxy.test.ts"
   },
   "files": [
     "lib/index.js",
