@@ -6,6 +6,7 @@ import type { Browser, BrowserContext, Page, StorageState } from 'playwright'
 import type { Config } from './index.js'
 import { navigateWithStealth } from './stealth.js'
 import { createProxyManager } from './proxy.js'
+import type { ProxyManager } from './proxy.js'
 import { AccountManager } from './accounts.js'
 import { assertSafeUrl } from './security.js'
 
@@ -28,7 +29,7 @@ export class SessionManager {
   private context: BrowserContext | null = null
   private pages = new Map<string, Page>()
   private accountMgr: AccountManager | null = null
-  private proxyMgr
+  private proxyMgr: ProxyManager | undefined
   private activeProxy: { server: string; username?: string; password?: string } | undefined
   private readonly sessionId = randomBytes(12).toString('hex')
   private readonly sessionDir: string
