@@ -50,7 +50,7 @@ export async function resolvePinnedPublicAddresses(hostname: string): Promise<st
 
 /** Validate and pin a DNS answer set. Exported for deterministic rebinding regression tests. */
 export function assertDnsAnswerStable(hostname: string, inputAddresses: string[], pins: Map<string, string[]> = dnsPins): string[] {
-  const normalized = hostname.toLowerCase().replace(/\\.$/, '')
+  const normalized = hostname.toLowerCase().replace(/\.$/, '')
   const addresses = [...new Set(inputAddresses)].sort()
   if (!addresses.length || addresses.some(address => !isIP(address) || blockedAddress(address))) throw new Error('Hostname resolves to a private or reserved address; request blocked')
   const pinned = pins.get(normalized)

@@ -15,7 +15,7 @@ describe('browser input security', () => {
     const pins = new Map<string, string[]>()
     expect(assertDnsAnswerStable('rebinding.example', ['93.184.216.34'], pins)).toEqual(['93.184.216.34'])
     expect(() => assertDnsAnswerStable('rebinding.example', ['10.0.0.8'], pins)).toThrow(/private or reserved/)
-    expect(() => assertDnsAnswerStable('rebinding.example', ['203.0.113.9'], pins)).toThrow(/DNS answer changed/)
+    expect(() => assertDnsAnswerStable('rebinding.example', ['8.8.8.8'], pins)).toThrow(/DNS answer changed/)
     expect(assertDnsAnswerStable('rebinding.example', ['93.184.216.34'], pins)).toEqual(['93.184.216.34'])
   })
   it('returns a stable pinned address for public IP literals', async () => {

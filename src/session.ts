@@ -181,10 +181,9 @@ export class SessionManager {
     return result
   }
 
-  private assertPersistenceEnabled(): string {
+  private assertPersistenceEnabled(): void {
     if (!this.config.session?.enabled) throw new Error('Session persistence is disabled')
     activeSessionKey(this.config.session)
-    return 'configured'
   }
 
   private async resolveSessionFile(path: string): Promise<string> {
@@ -200,7 +199,7 @@ export class SessionManager {
   }
 
   async saveSession(label = 'default'): Promise<{ path: string; size: number }> {
-    const secret = this.assertPersistenceEnabled()
+    this.assertPersistenceEnabled()
     if (!/^[a-zA-Z0-9_-]{1,48}$/.test(label)) throw new Error('Session label must contain 1–48 letters, numbers, _ or -')
     const accountId = this.accountMgr?.getCurrentId() ?? null
     const context = accountId ? await this.accountMgr!.getAccountContext(accountId) : await this.ensureContext()
