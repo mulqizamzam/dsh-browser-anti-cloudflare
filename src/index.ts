@@ -32,7 +32,7 @@ export function apply(ctx: Context, input: Config = {}): void {
     throw new Error(`[${name}] browserUse slot is already taken by: ${ctx.browserUse.providerName}`)
   ctx.effect(function* () {
     yield ctx.browserUse.register(BrowserUseProviderName(name))
-    mountAcTools(ctx, config)
+    yield mountAcTools(ctx, config)
   }, `${name}.runtime`)
 }
 export function hello(): string { return 'ok' }
