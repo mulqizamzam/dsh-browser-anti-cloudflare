@@ -25,7 +25,7 @@ Add the package to the profile's cordis.patch.yml:
               enabled: true
               timeoutMs: 900000
               maxPages: 5
-              encryptionKey: \${BROWSER_SESSION_KEY}
+              encryptionKey: ${BROWSER_SESSION_KEY}
               sessionDir: ~/.cache/browser-automation/sessions
 
 Inject BROWSER_SESSION_KEY from a secret manager. Use at least 32 characters. Do not commit the key.
