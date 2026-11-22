@@ -43,7 +43,7 @@ export function mountAcTools(ctx: Context, config: Config): void {
         switch (op) {
           case 'navigate': {
             const response = await manager.navigate(String(args.url ?? ''), timeout)
-            return { url: String(args.url), status: response?.status() ?? 0 }
+            return { url: String(args.url), status: response?.status() ?? 0, waf: await manager.getWaf() }
           }
           case 'screenshot': return manager.screenshot(String(args.url ?? ''), timeout, args.fullPage === true)
           case 'click': return { success: true, url: await manager.click(String(args.url ?? ''), validateSelector(String(args.selector ?? '')), timeout) }
