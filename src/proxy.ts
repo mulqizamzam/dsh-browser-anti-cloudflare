@@ -12,7 +12,12 @@ export class ProxyManager {
       if (!['http:', 'https:', 'socks5:'].includes(parsed.protocol) || !parsed.hostname || !parsed.port)
         throw new Error('Proxy must be an explicit HTTP(S) or SOCKS5 URL with host and port')
       if (parsed.username || parsed.password) throw new Error('Put proxy credentials in username/password fields')
-      return { ...p, url: parsed.origin }
+      if (parsed.pathname !== '/' || parsed.search || parsed.hash)
+        throw new Error('Proxy URL must contain only scheme, host, and port')
+      // WHATWG URL.origin is "null" for non-special schemes such as socks5:.
+      // Preserve the explicit SOCKS5 authority so Playwright receives a valid endpoint.
+      const url = parsed.protocol === 'socks5:' ? `${parsed.protocol}//${parsed.host}` : parsed.origin
+      return { ...p, url }
     })
     this.rotate = config.rotate ?? this.proxies.length > 1
   }
