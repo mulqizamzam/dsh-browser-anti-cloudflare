@@ -4,12 +4,22 @@ A Playwright browser-use provider for authorized automation. Features include pu
 
 **This package does not bypass Cloudflare, CAPTCHA, Turnstile, or other access controls.** Use the site's approved verification flow or authorized API.
 
+## Install
+
+Install from GitHub into a DSH profile:
+
+```bash
+dsh plugin --profile <name> add "github:mulqizamzam/dsh-browser-anti-cloudflare#main"
+```
+
+The package claims the exclusive browserUse provider slot. Disable competing browser-use providers before loading it. See [docs/INSTALL.md](docs/INSTALL.md) for local installation and configuration details.
+
 ## Security defaults
 - Only HTTP(S) URLs are accepted.
 - Loopback, private, link-local, reserved, and internal hostnames/IPs are blocked. DNS answers and subresource/redirect requests are checked.
 - `allowPrivateNetworks` defaults to `false`; enable only in isolated local tests with trusted inputs.
 - `ac_browser_eval` is disabled unless `allowUnsafeEval: true` is explicitly configured.
-- Session persistence requires `session.encryptionKey` (at least 32 characters). Files use AES-256-GCM and restrictive permissions.
+- The same in-memory browser context is reused across tool calls. Disk session persistence requires `session.encryptionKey` (at least 32 characters); files use AES-256-GCM and restrictive permissions.
 - Session export/import is disabled with account isolation until per-account encrypted restore is implemented.
 - Supply proxy credentials through secrets, not embedded URLs.
 
