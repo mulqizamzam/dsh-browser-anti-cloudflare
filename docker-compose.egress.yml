@@ -1,0 +1,25 @@
+services:
+  egress:
+    build:
+      context: ./deploy/egress
+    cap_add:
+      - NET_ADMIN
+    restart: unless-stopped
+    # This container owns the shared network namespace and firewall rules.
+  browser:
+    image: ${BROWSER_IMAGE:-browser-automation:local}
+    network_mode: "service:egress"
+    depends_on:
+      - egress
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - ./deploy/egress/resolv.conf:/etc/resolv.conf:ro
+      - browser-sessions:/home/app/.cache/browser-anti-cloudflare/sessions
+    environment:
+      BROWSER_SESSION_KEY: ${BROWSER_SESSION_KEY:?Set BROWSER_SESSION_KEY in the deployment environment}
+    # Set the image's runtime user/home and sessionDir to match the volume.
+volumes:
+  browser-sessions:
