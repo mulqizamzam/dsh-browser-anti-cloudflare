@@ -11,9 +11,10 @@ export interface AccountConfig {
 }
 interface AccountState { config: AccountConfig; browser: Browser | null; context: BrowserContext | null; currentPage?: Page }
 export class AccountManager {
+  private proxyManager
   private accounts = new Map<string, AccountState>()
   private currentAccountId: string | null = null
-  constructor(private readonly config: Pick<Config, 'headless' | 'executablePath' | 'proxy'> = {}) {}
+  constructor(private readonly config: Pick<Config, 'headless' | 'executablePath' | 'proxy' | 'allowPrivateNetworks'> = {}) { this.proxyManager = createProxyManager(config.proxy) }
   register(config: AccountConfig): void {
     if (!/^[a-zA-Z0-9_-]{1,64}$/.test(config.id)) throw new Error('Account id must contain 1–64 letters, numbers, _ or -')
     if (this.accounts.has(config.id)) throw new Error(`Account ${config.id} already exists`)
@@ -26,17 +27,18 @@ export class AccountManager {
     const browser = await chromium.launch({ headless: this.config.headless ?? true, executablePath: this.config.executablePath ?? undefined, args: ['--disable-dev-shm-usage', '--disable-gpu'] })
     const proxy = state.config.proxyUrl
       ? createProxyManager({ url: state.config.proxyUrl })?.getPlaywrightProxy()
-      : createProxyManager(this.config.proxy)?.getPlaywrightProxy()
+      : this.proxyManager?.getPlaywrightProxy()
     try {
       const context = await browser.newContext({ ...(proxy ? { proxy } : {}) })
       state.browser = browser; state.context = context
       return context
     } catch (error) { await browser.close(); throw error }
   }
-  async getAccountPage(id: string): Promise<Page> {
+  async getAccountPage(id: string, url?: string): Promise<Page> {
     const context = await this.getAccountContext(id)
     const state = this.accounts.get(id)!
     if (!state.currentPage || state.currentPage.isClosed()) state.currentPage = await context.newPage()
+    if (url) { const { navigateWithStealth } = await import('./stealth.js'); await navigateWithStealth(state.currentPage, url, 30000, { allowPrivateNetworks: this.config.allowPrivateNetworks }) }
     return state.currentPage
   }
   getAccountProfile(_id: string): null { return null }
