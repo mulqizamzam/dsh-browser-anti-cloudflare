@@ -31,4 +31,21 @@ describe('encrypted session persistence', () => {
       await expect(manager.loadSession('/etc/passwd')).rejects.toThrow()
     } finally { await manager.close(); await rm(dir, { recursive: true, force: true }) }
   }, 30000)
+  it('binds encrypted storage state to its account identity', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'browser-account-session-'))
+    const manager = new SessionManager({
+      headless: true,
+      accounts: [{ id: 'alice' }, { id: 'bob' }],
+      session: { enabled: true, sessionDir: dir, encryptionKey: 'a'.repeat(40) },
+    })
+    try {
+      manager.switchAccount('alice')
+      const saved = await manager.saveSession('profile')
+      expect(saved.path).toContain('alice-profile-')
+      manager.switchAccount('bob')
+      await expect(manager.loadSession(saved.path)).rejects.toThrow(/different account/)
+      manager.switchAccount('alice')
+      await expect(manager.loadSession(saved.path)).resolves.toBe(true)
+    } finally { await manager.close(); await rm(dir, { recursive: true, force: true }) }
+  }, 30000)
 })
