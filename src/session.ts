@@ -295,7 +295,7 @@ export class SessionManager {
     this.touch()
     if (!this.accountMgr) throw new Error('No accounts configured')
     this.accountMgr.setCurrent(id)
-    this.recordDiagnostic('account.switched', 'info', { accountId: id })
+    this.recordDiagnostic('account.switched', 'info', { accountSwitched: true })
   }
 
   listAccounts(): string[] { return this.accountMgr?.listAccounts() ?? [] }
