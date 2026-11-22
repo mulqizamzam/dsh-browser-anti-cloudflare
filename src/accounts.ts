@@ -1,8 +1,9 @@
 import { chromium } from 'playwright'
-import type { Browser, BrowserContext, Page } from 'playwright'
+import type { Browser, BrowserContext, Page, StorageState } from 'playwright'
 import type { Config } from './index.js'
 import { createProxyManager } from './proxy.js'
 import type { ProxyManager } from './proxy.js'
+import { enforcePageLimit } from './lifecycle.js'
 
 export interface AccountConfig {
   id: string
@@ -15,25 +16,39 @@ export class AccountManager {
   private proxyManager: ProxyManager | undefined
   private accounts = new Map<string, AccountState>()
   private currentAccountId: string | null = null
-  constructor(private readonly config: Pick<Config, 'headless' | 'executablePath' | 'proxy' | 'allowPrivateNetworks'> = {}) { this.proxyManager = createProxyManager(config.proxy) }
+  constructor(private readonly config: Pick<Config, 'headless' | 'executablePath' | 'proxy' | 'allowPrivateNetworks' | 'session'> = {}) {
+    this.proxyManager = createProxyManager(config.proxy)
+  }
   register(config: AccountConfig): void {
     if (!/^[a-zA-Z0-9_-]{1,64}$/.test(config.id)) throw new Error('Account id must contain 1–64 letters, numbers, _ or -')
-    if (this.accounts.has(config.id)) throw new Error(`Account ${config.id} already exists`)
+    if (this.accounts.has(config.id)) throw new Error(\`Account \${config.id} already exists\`)
     this.accounts.set(config.id, { config, browser: null, context: null })
   }
-  async getAccountContext(id: string): Promise<BrowserContext> {
-    const state = this.accounts.get(id)
-    if (!state) throw new Error(`Account ${id} not found`)
-    if (state.context && state.browser?.isConnected()) return state.context
+  private async createContext(id: string, state: AccountState, storageState?: StorageState): Promise<BrowserContext> {
     const browser = await chromium.launch({ headless: this.config.headless ?? true, executablePath: this.config.executablePath ?? undefined, args: ['--disable-dev-shm-usage', '--disable-gpu'] })
     const proxy = state.config.proxyUrl
       ? createProxyManager({ url: state.config.proxyUrl })?.getPlaywrightProxy()
       : this.proxyManager?.getPlaywrightProxy()
     try {
-      const context = await browser.newContext({ serviceWorkers: 'block', ...(proxy ? { proxy } : {}) })
-      state.browser = browser; state.context = context
+      const context = await browser.newContext({ ...(storageState ? { storageState } : {}), serviceWorkers: 'block', ...(proxy ? { proxy } : {}) })
+      enforcePageLimit(context, this.config.session?.maxPages ?? 5)
+      state.browser = browser; state.context = context; state.currentPage = undefined
       return context
     } catch (error) { await browser.close(); throw error }
+  }
+  async getAccountContext(id: string): Promise<BrowserContext> {
+    const state = this.accounts.get(id)
+    if (!state) throw new Error(\`Account \${id} not found\`)
+    if (state.context && state.browser?.isConnected()) return state.context
+    return this.createContext(id, state)
+  }
+  async restoreAccountStorageState(id: string, storageState: StorageState): Promise<void> {
+    const state = this.accounts.get(id)
+    if (!state) throw new Error(\`Account \${id} not found\`)
+    await state.context?.close().catch(() => {})
+    await state.browser?.close().catch(() => {})
+    state.context = null; state.browser = null; state.currentPage = undefined
+    await this.createContext(id, state, storageState)
   }
   async getAccountPage(id: string, url?: string): Promise<Page> {
     const context = await this.getAccountContext(id)
@@ -44,16 +59,20 @@ export class AccountManager {
   }
   getAccountProfile(_id: string): null { return null }
   getAccountState(id: string): AccountState | null { return this.accounts.get(id) ?? null }
-  setCurrent(id: string): void { if (!this.accounts.has(id)) throw new Error(`Account ${id} not found`); this.currentAccountId = id }
+  setCurrent(id: string): void { if (!this.accounts.has(id)) throw new Error(\`Account \${id} not found\`); this.currentAccountId = id }
   getCurrentId(): string | null { return this.currentAccountId }
   listAccounts(): string[] { return [...this.accounts.keys()] }
   get count(): number { return this.accounts.size }
-  async closeAll(): Promise<void> {
+  getPageCount(): number { return [...this.accounts.values()].reduce((sum, state) => sum + (state.context?.pages().length ?? 0), 0) }
+  async closeContexts(): Promise<void> {
     for (const state of this.accounts.values()) {
       await state.context?.close().catch(() => {})
       await state.browser?.close().catch(() => {})
       state.context = null; state.browser = null; state.currentPage = undefined
     }
+  }
+  async closeAll(): Promise<void> {
+    await this.closeContexts()
     this.accounts.clear(); this.currentAccountId = null
   }
 }
