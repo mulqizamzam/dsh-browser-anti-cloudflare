@@ -66,11 +66,13 @@ export class AccountManager {
   get count(): number { return this.accounts.size }
   getPageCount(): number { return [...this.accounts.values()].reduce((sum, state) => sum + (state.context?.pages().length ?? 0), 0) }
   async closeContexts(): Promise<void> {
-    for (const state of this.accounts.values()) {
-      await state.context?.close().catch(() => {})
-      await state.browser?.close().catch(() => {})
+    const resources = [...this.accounts.values()].map(state => {
+      const context = state.context
+      const browser = state.browser
       state.context = null; state.browser = null; state.currentPage = undefined
-    }
+      return Promise.all([context?.close().catch(() => {}), browser?.close().catch(() => {})])
+    })
+    await Promise.all(resources)
   }
   async closeAll(): Promise<void> {
     await this.closeContexts()
