@@ -52,14 +52,15 @@ export class SessionManager {
   async getPage(url?: string): Promise<Page> {
     if (this.accountMgr && this.accountMgr.getCurrentId()) {
       const page = await this.accountMgr.getAccountPage(this.accountMgr.getCurrentId()!)
-      if (url) await assertSafeUrl(url)
+      if (url) await assertSafeUrl(url, this.config.allowPrivateNetworks)
       return page
     }
     let page = this.pages.get('default')
     if (!page || page.isClosed()) { page = await (await this.ensureContext()).newPage(); this.pages.set('default', page) }
-    if (url) await assertSafeUrl(url)
+    if (url) await assertSafeUrl(url, this.config.allowPrivateNetworks)
     return page
   }
+  async getOrCreatePage(url?: string): Promise<Page> { return this.getPage(url) }
   async navigate(url: string, timeoutMs: number): Promise<import('playwright').Response | null> {
     const page = await this.getPage()
     return navigateWithStealth(page, url, timeoutMs, { allowPrivateNetworks: this.config.allowPrivateNetworks })
