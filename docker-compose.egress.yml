@@ -5,12 +5,18 @@ services:
     cap_add:
       - NET_ADMIN
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 53"]
+      interval: 5s
+      timeout: 2s
+      retries: 12
     # This container owns the shared network namespace and firewall rules.
   browser:
     image: ${BROWSER_IMAGE:-browser-automation:local}
     network_mode: "service:egress"
     depends_on:
-      - egress
+      egress:
+        condition: service_healthy
     cap_drop:
       - ALL
     security_opt:
