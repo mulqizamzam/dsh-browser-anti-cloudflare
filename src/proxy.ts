@@ -6,7 +6,7 @@ export class ProxyManager {
   private readonly rotate: boolean
   private readonly proxies: ProxyConfig[]
   constructor(config: ProxyManagerConfig) {
-    if (!config.proxies?.length) throw new Error('At least one proxy is required')
+    if (!config.proxies?.length) throw new Error('ProxyManager requires at least one proxy URL')
     this.proxies = config.proxies.map(p => {
       const parsed = new URL(p.url)
       if (!['http:', 'https:', 'socks5:'].includes(parsed.protocol) || !parsed.hostname || !parsed.port)
