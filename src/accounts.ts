@@ -21,7 +21,7 @@ export class AccountManager {
   }
   register(config: AccountConfig): void {
     if (!/^[a-zA-Z0-9_-]{1,64}$/.test(config.id)) throw new Error('Account id must contain 1–64 letters, numbers, _ or -')
-    if (this.accounts.has(config.id)) throw new Error(\`Account ${config.id} already exists\`)
+    if (this.accounts.has(config.id)) throw new Error(`Account ${config.id} already exists`)
     this.accounts.set(config.id, { config, browser: null, context: null })
   }
   private async createContext(id: string, state: AccountState, storageState?: StorageState): Promise<BrowserContext> {
@@ -38,13 +38,13 @@ export class AccountManager {
   }
   async getAccountContext(id: string): Promise<BrowserContext> {
     const state = this.accounts.get(id)
-    if (!state) throw new Error(\`Account ${id} not found\`)
+    if (!state) throw new Error(`Account ${id} not found`)
     if (state.context && state.browser?.isConnected()) return state.context
     return this.createContext(id, state)
   }
   async restoreAccountStorageState(id: string, storageState: StorageState): Promise<void> {
     const state = this.accounts.get(id)
-    if (!state) throw new Error(\`Account ${id} not found\`)
+    if (!state) throw new Error(`Account ${id} not found`)
     await state.context?.close().catch(() => {})
     await state.browser?.close().catch(() => {})
     state.context = null; state.browser = null; state.currentPage = undefined
@@ -59,7 +59,7 @@ export class AccountManager {
   }
   getAccountProfile(_id: string): null { return null }
   getAccountState(id: string): AccountState | null { return this.accounts.get(id) ?? null }
-  setCurrent(id: string): void { if (!this.accounts.has(id)) throw new Error(\`Account ${id} not found\`); this.currentAccountId = id }
+  setCurrent(id: string): void { if (!this.accounts.has(id)) throw new Error(`Account ${id} not found`); this.currentAccountId = id }
   getCurrentId(): string | null { return this.currentAccountId }
   listAccounts(): string[] { return [...this.accounts.keys()] }
   get count(): number { return this.accounts.size }
