@@ -19,10 +19,11 @@ function blockedAddress(address: string): boolean {
   if (version === 4) return blockedIPv4(address)
   if (version === 6) {
     const ip = address.toLowerCase()
-    return ip === '::' || ip === '::1' || ip.startsWith('fc') ||
-      ip.startsWith('fd') || ip.startsWith('fe8') || ip.startsWith('fe9') ||
+    const firstHextet = Number.parseInt(ip.split(':')[0] || '0', 16)
+    return firstHextet < 0x2000 || firstHextet > 0x3fff || ip.startsWith('2001:db8') ||
+      ip.startsWith('fc') || ip.startsWith('fd') || ip.startsWith('fe8') || ip.startsWith('fe9') ||
       ip.startsWith('fea') || ip.startsWith('feb') || ip.startsWith('ff') ||
-      ip.startsWith('::ffff:')
+      ip.startsWith('::ffff:') || ip.startsWith('64:ff9b:')
   }
   return false
 }
