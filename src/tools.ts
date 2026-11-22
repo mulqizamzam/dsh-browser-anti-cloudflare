@@ -27,7 +27,7 @@ const DESCRIPTIONS: Record<AcOperation, string> = {
 }
 const GUIDANCE = `Browser tools only navigate to public HTTP(S) destinations. Private, loopback, link-local, and reserved network addresses are blocked, including subresource requests and redirects. WAF detection is passive: the browser reports observed protection/challenge signals and does not forge tokens, defeat CAPTCHA, or bypass access controls. Use site-authorized APIs or complete verification through the site's normal flow. Browser eval is disabled unless explicitly enabled for a trusted workflow. Session files require an encryption key.`
 
-export function mountAcTools(ctx: Context, config: Config): void {
+export function mountAcTools(ctx: Context, config: Config): () => Promise<void> {
   const manager = new SessionManager(config)
   for (const op of Object.keys(SCHEMAS) as AcOperation[]) {
     ctx.tools.register(createMcpToolDefinition(ctx, {
@@ -57,4 +57,5 @@ export function mountAcTools(ctx: Context, config: Config): void {
     }))
   }
   ctx.systemPrompt.section({ name: 'browser-use:anti-cloudflare', text: GUIDANCE, order: ctx.systemPrompt.getSectionOrder('TOOL_COMPUTER_USE') })
+  return () => manager.close()
 }
