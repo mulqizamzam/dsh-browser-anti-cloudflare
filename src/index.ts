@@ -9,13 +9,13 @@ export interface Config {
   headless?: boolean
   operationTimeoutMs?: number
   executablePath?: string
-  /** Explicit opt-in for trusted JavaScript execution inside page context. */
   allowUnsafeEval?: boolean
-  /** Explicit development-only opt-in for loopback/private destinations. Never enable for untrusted inputs. */
   allowPrivateNetworks?: boolean
   session?: {
     enabled?: boolean
+    /** Idle inactivity timeout in milliseconds; 0 disables automatic expiry. */
     timeoutMs?: number
+    /** Maximum number of live pages per browser context. */
     maxPages?: number
     sessionDir?: string
     /** Required for save/load; use a secret manager and at least 32 characters. */
@@ -29,10 +29,10 @@ export function apply(ctx: Context, input: Config = {}): void {
   if (config.session?.enabled && (!config.session.encryptionKey || config.session.encryptionKey.length < 32))
     throw new Error('session.encryptionKey (minimum 32 characters) is required when session persistence is enabled')
   if (ctx.browserUse.providerName !== undefined)
-    throw new Error(`[${name}] browserUse slot is already taken by: ${ctx.browserUse.providerName}`)
+    throw new Error(\`[\${name}] browserUse slot is already taken by: \${ctx.browserUse.providerName}\`)
   ctx.effect(function* () {
     yield ctx.browserUse.register(BrowserUseProviderName(name))
     yield mountAcTools(ctx, config)
-  }, `${name}.runtime`)
+  }, \`\${name}.runtime\`)
 }
 export function hello(): string { return 'ok' }
