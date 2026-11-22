@@ -29,6 +29,12 @@ pnpm run test:security
 - WAF detection is passive and must not be treated as an authorization decision.
 - Fingerprint profile generation is metadata only; no browser identity spoofing is applied.
 
+## Diagnostics
+- `observability.enabled` defaults to true; `observability.maxEvents` defaults to 100 and is limited to 1–1000.
+- `ac_browser_diagnostics` exposes bounded in-memory events and counters.
+- Diagnostic fields are allowlisted. Do not add URLs, selectors, form values, page content, session paths, account IDs, or credentials.
+- Events are process-local; no external telemetry exporter is configured.
+
 ## Architecture notes
 - `SessionManager` owns the shared browser runtime, page lifecycle, idle timeout, session encryption, and tool operations.
 - `AccountManager` owns one browser/context pair per configured account.
