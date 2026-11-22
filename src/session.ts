@@ -10,6 +10,7 @@ import type { ProxyManager } from './proxy.js'
 import { AccountManager } from './accounts.js'
 import { assertSafeUrl } from './security.js'
 import { enforcePageLimit } from './lifecycle.js'
+import { DiagnosticRecorder } from './diagnostics.js'
 
 const LEGACY_MAGIC = 'BAS1'
 const VERSIONED_MAGIC = 'BAS2'
@@ -66,8 +67,10 @@ export class SessionManager {
   private idleTimer: ReturnType<typeof setTimeout> | undefined
   private closed = false
   private operationQueue: Promise<void> = Promise.resolve()
+  private readonly diagnostics: DiagnosticRecorder
 
   constructor(private readonly config: Config) {
+    this.diagnostics = new DiagnosticRecorder(config.observability)
     this.sessionDir = resolve(config.session?.sessionDir ?? join(process.env.HOME || '/tmp', '.cache', 'browser-anti-cloudflare', 'sessions'))
     this.idleTimeoutMs = config.session?.timeoutMs ?? 0
     this.maxPages = config.session?.maxPages ?? 5
@@ -95,6 +98,12 @@ export class SessionManager {
       release()
     }
   }
+
+  recordDiagnostic(event: string, level: 'info' | 'warn' | 'error' = 'info', attributes: Record<string, string | number | boolean | null> = {}, durationMs?: number): void {
+    this.diagnostics.record(event, level, attributes, durationMs)
+  }
+
+  getDiagnostics() { return this.diagnostics.snapshot() }
 
   private touch(): void {
     if (this.closed) return
@@ -138,6 +147,7 @@ export class SessionManager {
     this.activeProxy = this.proxyMgr?.getPlaywrightProxy()
     this.context = await this.browser.newContext({ serviceWorkers: 'block', ...(this.activeProxy ? { proxy: this.activeProxy } : {}) })
     enforcePageLimit(this.context, this.maxPages)
+    this.recordDiagnostic('browser.context_started', 'info', { proxyConfigured: !!this.activeProxy, maxPages: this.maxPages })
     return this.context
   }
 
@@ -160,6 +170,8 @@ export class SessionManager {
   async navigate(url: string, timeoutMs: number): Promise<import('playwright').Response | null> {
     const page = await this.getPage()
     const response = await navigateWithStealth(page, url, timeoutMs, { allowPrivateNetworks: this.config.allowPrivateNetworks })
+    const waf = await page.evaluate(() => (window as Window & { __browserWaf?: string }).__browserWaf ?? 'unknown').catch(() => 'unknown')
+    this.recordDiagnostic('waf.observed', 'info', { classification: waf, status: response?.status() ?? 0 })
     this.touch()
     return response
   }
@@ -226,6 +238,7 @@ export class SessionManager {
     const path = join(this.sessionDir, `${prefix}${label}-${this.sessionId}.session`)
     const content = encrypt(JSON.stringify({ version: 2, createdAt: Date.now(), accountId, state }), this.config.session!)
     await writeFile(path, content, { encoding: 'utf8', mode: 0o600 })
+    this.recordDiagnostic('session.saved', 'info', { accountBound: !!accountId, bytes: Buffer.byteLength(content) })
     this.touch()
     return { path, size: Buffer.byteLength(content) }
   }
@@ -250,6 +263,7 @@ export class SessionManager {
       const current = this.accountMgr?.getCurrentId()
       if (!current || current !== decoded.accountId) throw new Error('Encrypted session belongs to a different account')
       await this.accountMgr!.restoreAccountStorageState(current, decoded.state)
+      this.recordDiagnostic('session.loaded', 'info', { accountBound: true })
       this.touch()
       return true
     }
@@ -260,6 +274,7 @@ export class SessionManager {
     enforcePageLimit(this.context, this.maxPages)
     for (const page of this.pages.values()) await page.close().catch(() => {})
     this.pages.clear()
+    this.recordDiagnostic('session.loaded', 'info', { accountBound: false })
     this.touch()
     return true
   }
@@ -280,6 +295,7 @@ export class SessionManager {
     this.touch()
     if (!this.accountMgr) throw new Error('No accounts configured')
     this.accountMgr.setCurrent(id)
+    this.recordDiagnostic('account.switched', 'info', { accountId: id })
   }
 
   listAccounts(): string[] { return this.accountMgr?.listAccounts() ?? [] }
