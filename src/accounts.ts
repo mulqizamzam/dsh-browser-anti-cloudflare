@@ -23,7 +23,7 @@ export class AccountManager {
   async getAccountContext(id: string): Promise<BrowserContext> {
     const state = this.accounts.get(id)
     if (!state) throw new Error(`Account ${id} not found`)
-    if (state.context && !state.context.pages().every(p => p.isClosed())) return state.context
+    if (state.context && state.browser?.isConnected()) return state.context
     const browser = await chromium.launch({ headless: this.config.headless ?? true, executablePath: this.config.executablePath ?? undefined, args: ['--disable-dev-shm-usage', '--disable-gpu'] })
     const proxy = state.config.proxyUrl
       ? createProxyManager({ url: state.config.proxyUrl })?.getPlaywrightProxy()
