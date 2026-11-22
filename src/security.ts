@@ -45,14 +45,17 @@ export async function resolvePinnedPublicAddresses(hostname: string): Promise<st
   try { records = await lookup(normalized, { all: true, verbatim: true }) }
   catch { throw new Error('Hostname DNS resolution failed; request blocked') }
   const addresses = [...new Set(records.map(record => record.address))].sort()
-  if (!addresses.length || addresses.some(blockedAddress)) {
-    throw new Error('Hostname resolves to a private or reserved address; request blocked')
-  }
-  const pinned = dnsPins.get(normalized)
-  if (pinned && (pinned.length !== addresses.length || pinned.some((address, index) => address !== addresses[index]))) {
-    throw new Error('DNS answer changed during this process lifetime; request blocked')
-  }
-  if (!pinned) dnsPins.set(normalized, addresses)
+  return assertDnsAnswerStable(normalized, addresses)
+}
+
+/** Validate and pin a DNS answer set. Exported for deterministic rebinding regression tests. */
+export function assertDnsAnswerStable(hostname: string, inputAddresses: string[], pins: Map<string, string[]> = dnsPins): string[] {
+  const normalized = hostname.toLowerCase().replace(/\\.$/, '')
+  const addresses = [...new Set(inputAddresses)].sort()
+  if (!addresses.length || addresses.some(address => !isIP(address) || blockedAddress(address))) throw new Error('Hostname resolves to a private or reserved address; request blocked')
+  const pinned = pins.get(normalized)
+  if (pinned && (pinned.length !== addresses.length || pinned.some((address, index) => address !== addresses[index]))) throw new Error('DNS answer changed during this process lifetime; request blocked')
+  if (!pinned) pins.set(normalized, addresses)
   return [...(pinned ?? addresses)]
 }
 

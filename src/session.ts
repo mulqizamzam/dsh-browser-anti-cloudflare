@@ -11,16 +11,39 @@ import { AccountManager } from './accounts.js'
 import { assertSafeUrl } from './security.js'
 import { enforcePageLimit } from './lifecycle.js'
 
-const MAGIC = 'BAS1'
-function encrypt(payload: string, secret: string): string {
+const LEGACY_MAGIC = 'BAS1'
+const VERSIONED_MAGIC = 'BAS2'
+type SessionCryptoConfig = NonNullable<Config['session']>
+function activeSessionKey(config: SessionCryptoConfig): { id: string; secret: string } {
+  if (config.encryptionKeys) {
+    const id = config.activeEncryptionKeyId
+    const secret = id ? config.encryptionKeys[id] : undefined
+    if (!id || !secret || secret.length < 32) throw new Error('Active session encryption key is missing or invalid')
+    return { id, secret }
+  }
+  if (!config.encryptionKey || config.encryptionKey.length < 32) throw new Error('Session encryption key must contain at least 32 characters')
+  return { id: 'legacy', secret: config.encryptionKey }
+}
+function encrypt(payload: string, config: SessionCryptoConfig): string {
+  const { id, secret } = activeSessionKey(config)
   const salt = randomBytes(16), iv = randomBytes(12), key = scryptSync(secret, salt, 32)
   const cipher = createCipheriv('aes-256-gcm', key, iv)
   const data = Buffer.concat([cipher.update(payload, 'utf8'), cipher.final()])
-  return [MAGIC, salt.toString('base64'), iv.toString('base64'), cipher.getAuthTag().toString('base64'), data.toString('base64')].join(':')
+  return [VERSIONED_MAGIC, id, salt.toString('base64'), iv.toString('base64'), cipher.getAuthTag().toString('base64'), data.toString('base64')].join(':')
 }
-function decrypt(payload: string, secret: string): string {
-  const [magic, salt, iv, tag, data] = payload.split(':')
-  if (magic !== MAGIC || !salt || !iv || !tag || !data) throw new Error('Invalid or unsupported session file')
+function decrypt(payload: string, config: SessionCryptoConfig): string {
+  const parts = payload.split(':')
+  const magic = parts[0]
+  let secret: string | undefined, salt: string | undefined, iv: string | undefined, tag: string | undefined, data: string | undefined
+  if (magic === LEGACY_MAGIC) {
+    [, salt, iv, tag, data] = parts
+    secret = config.encryptionKey
+  } else if (magic === VERSIONED_MAGIC) {
+    const [, keyId, encodedSalt, encodedIv, encodedTag, encodedData] = parts
+    salt = encodedSalt; iv = encodedIv; tag = encodedTag; data = encodedData
+    secret = keyId === 'legacy' ? config.encryptionKey : config.encryptionKeys?.[keyId]
+  }
+  if (!secret || secret.length < 32 || !salt || !iv || !tag || !data) throw new Error('Session encryption key is unavailable or session file is invalid')
   const decipher = createDecipheriv('aes-256-gcm', scryptSync(secret, Buffer.from(salt, 'base64'), 32), Buffer.from(iv, 'base64'))
   decipher.setAuthTag(Buffer.from(tag, 'base64'))
   return Buffer.concat([decipher.update(Buffer.from(data, 'base64')), decipher.final()]).toString('utf8')
@@ -160,9 +183,8 @@ export class SessionManager {
 
   private assertPersistenceEnabled(): string {
     if (!this.config.session?.enabled) throw new Error('Session persistence is disabled')
-    const secret = this.config.session.encryptionKey
-    if (!secret || secret.length < 32) throw new Error('Session persistence requires session.encryptionKey with at least 32 characters')
-    return secret
+    activeSessionKey(this.config.session)
+    return 'configured'
   }
 
   private async resolveSessionFile(path: string): Promise<string> {
@@ -187,7 +209,7 @@ export class SessionManager {
     await chmod(this.sessionDir, 0o700)
     const prefix = accountId ? `${accountId}-` : ''
     const path = join(this.sessionDir, `${prefix}${label}-${this.sessionId}.session`)
-    const content = encrypt(JSON.stringify({ version: 2, createdAt: Date.now(), accountId, state }), secret)
+    const content = encrypt(JSON.stringify({ version: 2, createdAt: Date.now(), accountId, state }), this.config.session!)
     await writeFile(path, content, { encoding: 'utf8', mode: 0o600 })
     this.touch()
     return { path, size: Buffer.byteLength(content) }
@@ -196,7 +218,7 @@ export class SessionManager {
   async loadSession(path: string): Promise<boolean> {
     const secret = this.assertPersistenceEnabled()
     const actual = await this.resolveSessionFile(path)
-    const decoded = JSON.parse(decrypt(await readFile(actual, 'utf8'), secret)) as { version: number; accountId?: string | null; state?: StorageState }
+    const decoded = JSON.parse(decrypt(await readFile(actual, 'utf8'), this.config.session!)) as { version: number; accountId?: string | null; state?: StorageState }
     if (![1, 2].includes(decoded.version) || !decoded.state || !Array.isArray(decoded.state.cookies)) throw new Error('Invalid session payload')
     if (decoded.version === 1) {
       if (this.accountMgr) throw new Error('Legacy session files cannot be restored into an account context')

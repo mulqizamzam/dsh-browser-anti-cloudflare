@@ -37,6 +37,8 @@ jobs:
         run: |
           test -f deploy/egress/entrypoint.sh
           sh -n deploy/egress/entrypoint.sh
+          sh -n deploy/egress/verify.sh
+          test -f deploy/egress/README.md
   browser-integration:
     name: Browser integration
     runs-on: ubuntu-latest
