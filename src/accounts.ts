@@ -7,6 +7,7 @@ import { enforcePageLimit } from './lifecycle.js'
 
 export interface AccountConfig {
   id: string
+  /** Legacy metadata only; browser identity is not modified. */
   fingerprint?: 'auto' | 'windows' | 'mac' | 'linux'
   proxyUrl?: string
   sessionFile?: string
@@ -23,6 +24,8 @@ export class AccountManager {
   register(config: AccountConfig): void {
     if (!/^[a-zA-Z0-9_-]{1,64}$/.test(config.id)) throw new Error('Account id must contain 1–64 letters, numbers, _ or -')
     if (this.accounts.has(config.id)) throw new Error(`Account ${config.id} already exists`)
+    // Validate account overrides at startup, not on the first browser operation.
+    if (config.proxyUrl) createProxyManager({ url: config.proxyUrl })
     this.accounts.set(config.id, { config, browser: null, context: null })
   }
   private async createContext(id: string, state: AccountState, storageState?: StorageState): Promise<BrowserContext> {

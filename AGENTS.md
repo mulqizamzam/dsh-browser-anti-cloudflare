@@ -1,8 +1,8 @@
 # Browser Automation Provider — Agent Quick Start
 
-Purpose: register a Playwright browser-use provider for authorized public-web automation. The provider enforces URL/network policy, supports isolated account contexts, provides encrypted session snapshots, and reports passive WAF signals.
+Purpose: maintain a Playwright browser-use provider for authorized public-web automation. The provider enforces URL/network policy, supports isolated account contexts, encrypted account-bound session snapshots, proxy configuration, and passive WAF observations.
 
-This package does not bypass Cloudflare, CAPTCHA, Turnstile, or other access controls. Use the site's approved verification flow or authorized API.
+This package does not bypass Cloudflare, CAPTCHA, Turnstile, or other access controls. Use the site's approved verification flow or an authorized API.
 
 ## Build
 ```bash
@@ -20,10 +20,27 @@ pnpm run test:security
 ## Security defaults
 - Only HTTP(S) URLs are accepted.
 - Private, loopback, link-local, reserved, and internal destinations are blocked by default.
-- allowPrivateNetworks is restricted to isolated local development/testing.
-- Browser eval is disabled unless allowUnsafeEval=true is explicitly configured.
+- `allowPrivateNetworks` is restricted to isolated local development/testing.
+- Browser eval is disabled unless `allowUnsafeEval=true` is explicitly configured.
 - Session persistence requires a 32+ character encryption key and AES-256-GCM.
-- Per-account encrypted session import/export is not currently implemented.
+- Saved session payloads include the account ID; restoring requires the matching account to be selected.
+- Account contexts are isolated from one another.
+- Proxy credentials must be supplied through secret-backed username/password fields, not embedded in proxy URLs.
+- WAF detection is passive and must not be treated as an authorization decision.
+- Fingerprint profile generation is metadata only; no browser identity spoofing is applied.
+
+## Diagnostics
+- `observability.enabled` defaults to true; `observability.maxEvents` defaults to 100 and is limited to 1–1000.
+- `ac_browser_diagnostics` exposes bounded in-memory events and counters.
+- Diagnostic fields are allowlisted. Do not add URLs, selectors, form values, page content, session paths, account IDs, or credentials.
+- Events are process-local; no external telemetry exporter is configured.
+
+## Architecture notes
+- `SessionManager` owns the shared browser runtime, page lifecycle, idle timeout, session encryption, and tool operations.
+- `AccountManager` owns one browser/context pair per configured account.
+- `ProxyManager` validates explicit HTTP(S)/SOCKS5 endpoints and can rotate a configured pool.
+- `src/tools.ts` is the source of truth for the registered tool surface.
+- Keep stateful browser operations serialized to prevent concurrent calls from mutating the same page/context.
 
 ## Install
 ```bash

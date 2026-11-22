@@ -35,6 +35,7 @@ The package claims the exclusive browserUse provider slot. Disable competing bro
 | ac_browser_session_save | Save encrypted browser storage state for the current account. |
 | ac_browser_session_load | Restore encrypted storage state only into the matching account. |
 | ac_browser_session_status | Report browser session status, page count, and timeout configuration. |
+| ac_browser_diagnostics | Report bounded in-memory diagnostic events and counters. |
 
 ## Example configuration
 
@@ -43,6 +44,20 @@ The package claims the exclusive browserUse provider slot. Disable competing bro
       timeoutMs: 900000
       maxPages: 5
       encryptionKey: ${BROWSER_SESSION_KEY}
+
+## Runtime diagnostics
+
+Diagnostics are enabled by default and retained in a bounded in-memory ring (100 events by default). The `ac_browser_diagnostics` tool reports event counts, errors, operation durations, browser-context lifecycle, session activity, and passive WAF observations.
+
+Example configuration:
+
+    observability:
+      enabled: true
+      maxEvents: 100
+
+Set `enabled: false` to disable event collection. `maxEvents` accepts values from 1 to 1000. Diagnostic metadata is allowlisted; URLs, selectors, form values, page content, session paths, account identifiers, and proxy credentials are not recorded. Events are process-local and are not exported to an external telemetry service.
+
+Stateful browser tools are serialized through a manager-owned operation queue because they share browser context/page state. Closing the manager waits for an active operation to finish and rejects queued/new work.
 
 ## WAF detection
 WAF detection is passive and informational. It inspects response headers and page content for known provider signals. It does not modify browser identity, forge challenge tokens, or alter access-control flows. A classification is best-effort, not proof that access is permitted.
