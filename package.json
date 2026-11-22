@@ -1,7 +1,7 @@
 {
   "name": "@mulqi/dsh-browser-anti-cloudflare",
   "description": "Secure Playwright browser-use provider with URL policy, encrypted sessions, account isolation, and passive WAF detection",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publishConfig": {
     "access": "public"
   },
@@ -48,9 +48,7 @@
     }
   },
   "dependencies": {
-    "playwright": "^1.65.1",
-    "playwright-extra": "^4.3.6",
-    "puppeteer-extra-plugin-stealth": "^2.11.2"
+    "playwright": "^1.65.1"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "4.0.5",
