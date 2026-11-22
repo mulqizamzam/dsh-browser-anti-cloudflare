@@ -18,6 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: pnpm/action-setup@v4
         with:
@@ -43,7 +44,9 @@ jobs:
       - name: Verify session encryption is enforced
         run: grep -q "session.encryptionKey" src/index.ts
       - name: Verify deployment egress policy exists
-        run: test -f deploy/egress/entrypoint.sh
+        run: |
+          test -f deploy/egress/entrypoint.sh
+          sh -n deploy/egress/entrypoint.sh
       - name: Commit generated lockfile for repository-owner PRs
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == github.repository_owner
         env:
