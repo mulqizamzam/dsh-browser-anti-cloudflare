@@ -2,6 +2,7 @@ import { chromium } from 'playwright'
 import type { Browser, BrowserContext, Page } from 'playwright'
 import type { Config } from './index.js'
 import { createProxyManager } from './proxy.js'
+import type { ProxyManager } from './proxy.js'
 
 export interface AccountConfig {
   id: string
@@ -11,7 +12,7 @@ export interface AccountConfig {
 }
 interface AccountState { config: AccountConfig; browser: Browser | null; context: BrowserContext | null; currentPage?: Page }
 export class AccountManager {
-  private proxyManager
+  private proxyManager: ProxyManager | undefined
   private accounts = new Map<string, AccountState>()
   private currentAccountId: string | null = null
   constructor(private readonly config: Pick<Config, 'headless' | 'executablePath' | 'proxy' | 'allowPrivateNetworks'> = {}) { this.proxyManager = createProxyManager(config.proxy) }
